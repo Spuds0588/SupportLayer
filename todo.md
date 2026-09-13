@@ -3,7 +3,7 @@
 Status legend: `[x]` done, `[~]` in progress, `[ ]` not started.
 Mirrors PRD Part 3 plus the launch/hosting work.
 
-**v1 is built, published, and green: 84/84 end-to-end checks pass in headless and headed
+**v1 is built, published, and green: 87/87 end-to-end checks pass in headless and headed
 Chromium, locally *and* against the live GitHub Pages origin.** Live at
 https://spuds0588.github.io/SupportLayer/. Remaining work is the explicit backlog.
 
@@ -83,8 +83,12 @@ https://spuds0588.github.io/SupportLayer/. Remaining work is the explicit backlo
 - [x] GitHub Pages live on `main` / root: https://spuds0588.github.io/SupportLayer/
       (`index.html`, `supportlayer.js`, `agent.html`, `test.html`, `demo-app.html`,
       `favicon.svg` all return 200).
-- [x] `npm run test:live` — the full 84-check suite runs against the deployed origin
-      (headless and headed), so the published artifact is verified, not assumed.
+- [x] `npm run test:live` — the full suite runs against the deployed origin (headless and
+      headed), so the published artifact is verified, not assumed.
+- [x] `INTEGRATION.md` — consumer-facing guide for integrators and coding agents.
+- [x] `live_session_url` no longer points at a CDN: static-file CDNs serve `.html` as
+      `text/plain`, so `defaultLiveBase()` falls back to the Pages console. Covered by a new
+      request-interception test (87 checks total).
 
 ## Backlog (explicitly not in v1)
 - [ ] Multiparty sessions / multiple agents per session.

@@ -9,7 +9,7 @@
  * reports every failure with the reason instead of stopping at the first one.
  */
 import { spawn } from "node:child_process";
-import { existsSync, mkdirSync } from "node:fs";
+import { existsSync, mkdirSync, readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import path from "node:path";
 import puppeteer from "puppeteer-core";
@@ -518,6 +518,11 @@ async function main() {
       return t.includes("mode=") ? t : false;
     });
     ok("widget booted with the harness config", badge);
+    eq(
+      "self-hosted delivery resolves the agent link beside the script",
+      await harness.evaluate(() => window.SupportLayer.config.liveBase),
+      `${BASE}/agent.html`
+    );
 
     await harness.click("#btn-checks");
     await waitFor(async () => (await harness.$$eval(".checks li", (els) => els.length)) > 3);
@@ -562,6 +567,36 @@ async function main() {
     const standaloneOk = await waitFor(() => standalone.evaluate(() => !!window.__AgentConsole), { timeout: 5000 });
     check("agent console boots with a peer target", standaloneOk);
     if (HEADED) await standalone.screenshot({ path: path.join(SHOT_DIR, "agent-headed.png") });
+
+    /* ============================= CDN delivery =============================
+     * The quick-start snippet loads the widget from jsDelivr, which serves `.html` as
+     * text/plain. Serve our own copy for that URL so the CDN branch is exercised without
+     * depending on the network. */
+    group("CDN delivery");
+    const cdnPage = await browser.newPage();
+    watch(cdnPage, "cdn");
+    const widgetSource = readFileSync(path.join(ROOT, "supportlayer.js"), "utf8");
+    await cdnPage.setRequestInterception(true);
+    cdnPage.on("request", (req) => {
+      if (req.url().includes("jsdelivr.net") && req.url().endsWith("supportlayer.js")) {
+        req.respond({ status: 200, contentType: "application/javascript", body: widgetSource });
+      } else {
+        req.continue();
+      }
+    });
+    await cdnPage.setContent(
+      `<!doctype html><html><body><script src="https://cdn.jsdelivr.net/gh/Spuds0588/SupportLayer@main/supportlayer.js" data-webhook="https://hooks.example.com/x" data-mode="none"></script></body></html>`,
+      { waitUntil: "domcontentloaded" }
+    );
+    const cdnReady = await waitFor(() => cdnPage.evaluate(() => !!(window.SupportLayer && window.SupportLayer.config)), { timeout: 6000 });
+    check("widget boots when loaded from a static-file CDN", cdnReady);
+    const cdnLiveBase = cdnReady ? await cdnPage.evaluate(() => window.SupportLayer.config.liveBase) : null;
+    eq(
+      "CDN delivery points the agent link at the Pages console",
+      cdnLiveBase,
+      "https://spuds0588.github.io/SupportLayer/agent.html"
+    );
+    await cdnPage.close();
 
     /* ============================= console hygiene ============================= */
     group("console hygiene");

@@ -8,9 +8,18 @@ user's screen, and hand text over for review.
 
 No middleware, no S3 bucket, no WebSocket relay, no SDK, no build step. Three files do the work.
 
-- Landing page + **simulated demo**: https://spuds0588.github.io/SupportLayer/
-- Integration harness: https://spuds0588.github.io/SupportLayer/test.html
-- Agent console: https://spuds0588.github.io/SupportLayer/agent.html
+## ▶ [**Open the live homepage and try the demo →**](https://spuds0588.github.io/SupportLayer/)
+
+The homepage runs the **real widget and the real agent console side by side** — file a report, watch the
+redaction pass, see the webhook payload, then drive the agent's laser/draw/type tools onto the customer page.
+No backend, no signup, no install.
+
+| | |
+| --- | --- |
+| 🏠 **Homepage + simulated demo** | **[spuds0588.github.io/SupportLayer](https://spuds0588.github.io/SupportLayer/)** |
+| 🧪 **Integration harness** | [spuds0588.github.io/SupportLayer/test.html](https://spuds0588.github.io/SupportLayer/test.html) |
+| 🎧 **Agent console** | [spuds0588.github.io/SupportLayer/agent.html](https://spuds0588.github.io/SupportLayer/agent.html) |
+| 📘 **Integration guide** | [INTEGRATION.md](INTEGRATION.md) — wiring it into your app, for humans and coding agents |
 
 ## Quick start
 
@@ -30,6 +39,11 @@ No middleware, no S3 bucket, no WebSocket relay, no SDK, no build step. Three fi
 
 Self-host it by dropping `supportlayer.js` and `agent.html` next to your app — the widget derives the agent URL from
 its own script location, so nothing else needs configuring.
+
+**New to this? Read [INTEGRATION.md](INTEGRATION.md).** It is written to be followed step by step by a human
+integrator *or* an AI coding agent: delivery options, the full attribute table, framework recipes
+(React/Next.js, Vue/Nuxt, plain HTML, self-driving headless mode), the exact webhook contract including the CORS
+preflight your endpoint must answer, CSP and HTTPS requirements, and a post-integration verification checklist.
 
 ### Modes
 
@@ -56,6 +70,9 @@ thing captured by default.
 | `data-fields` | JSON | Dynamic request form. Invalid JSON falls back to a single textarea and warns. |
 | `data-demo` | `true` `false` | Simulated capture + loopback transport (used by the landing-page demo). |
 | `data-live-base` | URL | Override the agent console URL. Defaults to `agent.html` next to the script. |
+| `data-peer-cdn` | URL | Override where the PeerJS *library* is fetched from (not the signalling server). |
+| `data-label` | text | FAB button label. Default `Get support`. |
+| `data-title` | text | Panel heading. Default `Report an issue`. |
 
 `data-blur-selectors` and `data-blur-regex` split on commas **outside** `{}`, `()` and `[]`, so quantifiers like
 `{2,}` and selectors like `:is(.a, .b)` survive. A JSON array is also accepted.
@@ -152,7 +169,8 @@ verified rather than assumed.
 | `test.html` | Integration harness with in-page assertions. |
 | `serve.js` | Zero-dependency static dev server. |
 | `tests/e2e.mjs` | Puppeteer end-to-end suite (headless + headed). |
-| `agents.md` | Architecture rules for anyone (or any model) editing this repo. |
+| `INTEGRATION.md` | Step-by-step guide for wiring the library into *your* app (humans + coding agents). |
+| `agents.md` | Architecture rules for anyone (or any model) editing *this* repo. |
 | `todo.md`, `history.md` | Live task list and changelog. |
 | `PRD-SupportLayer.md` | The master dev document this was built from. |
 

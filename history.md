@@ -98,3 +98,27 @@ already-running origin and skip spawning `serve.js`.
 
 **Result.** 84/84 headless **and** 84/84 headed against the live Pages origin, console clean,
 zero failed same-origin requests. The published site is the same artifact that was tested.
+
+## 2026-09-13 — Session 2c: integration docs + a CDN landmine they exposed
+
+**`INTEGRATION.md` (new).** The repo had `agents.md` (rules for editing the widget) but nothing for
+the person wiring it into *their* app. The new guide is written to be followed directly by a human or
+a coding agent: delivery options, the complete attribute table, the `data-fields` schema, the exact
+webhook contract **including the CORS preflight that a JSON POST forces** (a webhook that answers
+`curl` still fails in a browser), routing recipes, privacy guidance, framework recipes
+(plain HTML / Next.js App Router / Nuxt / SPA routing / headless self-driving), console usage,
+a nine-step post-integration verification checklist, a troubleshooting table, and an explicit
+scope/"do not" section. Linked from the README, the landing page docs box, and the footer.
+
+**Bug the guide exposed — CDNs cannot host the agent console.** Writing the quick-start section
+revealed that jsDelivr returns `agent.html` as `Content-Type: text/plain`. The browser then renders
+the console as source code, so every CDN install would have shipped a `live_session_url` that does
+not work. Fixed with `defaultLiveBase()`: if the widget's own script is served from a known
+plain-text CDN (jsDelivr, fastly.jsdelivr, unpkg, cdnjs, raw.githubusercontent, githack) the payload
+now points at the project's Pages console; a self-hosted copy still resolves `agent.html` beside the
+script; `data-live-base` still overrides everything.
+
+**Tests (84 → 87).** The CDN branch is asserted without touching the network — the suite intercepts
+the jsDelivr URL and serves our own copy of `supportlayer.js` for it, so `script.src` is a CDN URL
+while the running code is the local build. A companion check asserts the self-hosted default. Green
+headless **and** headed, locally and against the live origin.

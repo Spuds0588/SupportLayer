@@ -19,6 +19,10 @@ bundler, no runtime dependencies, no framework.
 - `favicon.svg` — hand-written, no external asset dependencies.
 - `PRD-SupportLayer.md` — the master dev document (PRD + implementation guide + task list).
   **Still present in-repo; treat it as the source of truth for scope.**
+- `INTEGRATION.md` — the **consumer-facing** guide (install, attributes, webhook contract,
+  framework recipes, verification checklist, troubleshooting). Written for an integrator or a
+  coding agent dropping the widget into *another* app. Keep it in sync with the attribute
+  table whenever config changes — it is the file people actually follow.
 - `README.md` — public docs.
 - `todo.md` — live task list. **Update it as work lands.**
 - `history.md` — chronological dev log. **Append an entry for every meaningful change.**
@@ -78,6 +82,11 @@ bundler, no runtime dependencies, no framework.
 - **`[hidden] { display: none !important; }` is declared in the shadow stylesheet on purpose.**
   Without it, any overlay carrying its own `display` value (`.sl-draw-hint`) stays visible and
   blocks host clicks even while `hidden` is set.
+- **Never let a CDN host the agent console.** Static-file CDNs (jsDelivr, unpkg, raw.githubusercontent)
+  serve `.html` as `text/plain`, so the console renders as source code. `defaultLiveBase()` therefore
+  detects those hosts and points `live_session_url` at the project's Pages console; self-hosted copies
+  resolve `agent.html` beside the script, and `data-live-base` always wins. Both branches are asserted
+  in the e2e suite — the CDN branch is exercised by request-interception, not by hitting the network.
 - **The loopback announce loop must die with its transport.** It stops on connect, on
   `close()`, and after 200 tries, and it captures `peerId` locally instead of reading
   `session` — otherwise a timer fires after teardown and throws on a null session.

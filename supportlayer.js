@@ -25,6 +25,26 @@
   var TARGET_STYLE_ID = "supportlayer-target-css";
   var DEFAULT_THEME = "#14b8a6";
   var DEFAULT_PEER_CDN = "https://unpkg.com/peerjs@1.5.5/dist/peerjs.min.js";
+var PAGES_ORIGIN = "https://spuds0588.github.io/SupportLayer/";
+// Static-file CDNs serve `.html` as text/plain, so a browser would show the agent
+// console as source code. When the widget is loaded from one of them, the console
+// URL must point at the project's Pages host instead of the script's own directory.
+var PLAIN_TEXT_CDN_HOSTS = [
+  "cdn.jsdelivr.net",
+  "fastly.jsdelivr.net",
+  "unpkg.com",
+  "cdnjs.cloudflare.com",
+  "raw.githubusercontent.com",
+  "rawcdn.githack.com",
+  "raw.githack.com"
+];
+
+function isPlainTextCdn(hostname) {
+  var host = String(hostname || "").toLowerCase();
+  return PLAIN_TEXT_CDN_HOSTS.some(function (h) {
+    return host === h || host.slice(-(h.length + 1)) === "." + h;
+  });
+}
   var MODES = ["none", "chat", "audio", "video"];
 
   function uuid() {
@@ -167,6 +187,22 @@
     }
   }
 
+  /**
+   * Agent-console URL used in the webhook payload.
+   * Order: `data-live-base` → `agent.html` beside the script → the project's Pages
+   * console when the script itself lives on a plain-text CDN.
+   */
+  function defaultLiveBase() {
+    try {
+      var src = script && script.src ? script.src : location.href;
+      var resolved = new URL("agent.html", src);
+      if (isPlainTextCdn(resolved.hostname)) return PAGES_ORIGIN + "agent.html";
+      return resolved.href;
+    } catch (e) {
+      return "agent.html";
+    }
+  }
+
   var CFG = {
     webhook: dataAttr("webhook") || "",
     mode: (function () {
@@ -180,15 +216,7 @@
     fields: parseFields(dataAttr("fields")),
     demo: String(dataAttr("demo") || "false") === "true" || /[?&]sl-demo=1/.test(location.search),
     peerCdn: dataAttr("peer-cdn") || DEFAULT_PEER_CDN,
-    liveBase: dataAttr("live-base") || (function () {
-      // Default live-session dashboard URL: agent.html next to this script.
-      try {
-        var src = script && script.src ? script.src : location.href;
-        return new URL("agent.html", src).href;
-      } catch (e) {
-        return "agent.html";
-      }
-    })(),
+    liveBase: dataAttr("live-base") || defaultLiveBase(),
     labels: {
       fab: dataAttr("label") || "Get support",
       title: dataAttr("title") || "Report an issue"
