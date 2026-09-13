@@ -19,7 +19,7 @@ No backend, no signup, no install.
 | 🏠 **Homepage + simulated demo** | **[spuds0588.github.io/SupportLayer](https://spuds0588.github.io/SupportLayer/)** |
 | 🧪 **Integration harness** | [spuds0588.github.io/SupportLayer/test.html](https://spuds0588.github.io/SupportLayer/test.html) |
 | 🎧 **Agent console** | [spuds0588.github.io/SupportLayer/agent.html](https://spuds0588.github.io/SupportLayer/agent.html) |
-| 📘 **Integration guide** | [INTEGRATION.md](INTEGRATION.md) — wiring it into your app, for humans and coding agents |
+| 📘 **Integration guide** | [INTEGRATION.md](https://github.com/Spuds0588/SupportLayer/blob/main/INTEGRATION.md) — wiring it into your app, for humans and coding agents |
 
 ## Quick start
 
@@ -38,9 +38,11 @@ No backend, no signup, no install.
 ```
 
 Self-host it by dropping `supportlayer.js` and `agent.html` next to your app — the widget derives the agent URL from
-its own script location, so nothing else needs configuring.
+its own script location, so nothing else needs configuring. Loaded from a CDN, it points `live_session_url` at this
+project's Pages console instead: static-file CDNs serve `.html` as `text/plain`, so the console would otherwise open
+as source code. `data-live-base` overrides either way.
 
-**New to this? Read [INTEGRATION.md](INTEGRATION.md).** It is written to be followed step by step by a human
+**New to this? Read [INTEGRATION.md](https://github.com/Spuds0588/SupportLayer/blob/main/INTEGRATION.md).** It is written to be followed step by step by a human
 integrator *or* an AI coding agent: delivery options, the full attribute table, framework recipes
 (React/Next.js, Vue/Nuxt, plain HTML, self-driving headless mode), the exact webhook contract including the CORS
 preflight your endpoint must answer, CSP and HTTPS requirements, and a post-integration verification checklist.
