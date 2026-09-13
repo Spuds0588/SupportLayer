@@ -1,0 +1,877 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>SupportLayer — Agent Console</title>
+<meta name="robots" content="noindex, nofollow">
+<link rel="icon" type="image/svg+xml" href="favicon.svg">
+<style>
+  :root {
+    --primary: #14b8a6;
+    --primary-dim: rgba(20, 184, 166, .14);
+    --primary-border: rgba(20, 184, 166, .42);
+    --bg: #0a0c10;
+    --panel: #11141b;
+    --panel-2: #161a22;
+    --line: rgba(255, 255, 255, .09);
+    --text: #eef1f6;
+    --dim: #98a1b3;
+    --danger: #ff5f57;
+    --warn: #febc2e;
+    --ok: #28c840;
+    --mono: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  }
+  * { box-sizing: border-box; }
+  html, body { height: 100%; }
+  body {
+    margin: 0; background: var(--bg); color: var(--text);
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Inter, Roboto, sans-serif;
+    font-size: 14px; display: flex; flex-direction: column; min-height: 100vh;
+  }
+  a { color: var(--primary); }
+  header {
+    display: flex; align-items: center; gap: 14px; flex-wrap: wrap;
+    padding: 12px 18px; border-bottom: 1px solid var(--line); background: var(--panel);
+  }
+  .logo { display: flex; align-items: center; gap: 9px; font-weight: 800; letter-spacing: -.01em; }
+  .logo i { width: 10px; height: 10px; border-radius: 3px; background: var(--primary); box-shadow: 0 0 14px var(--primary); display: inline-block; }
+  .logo small { display: block; font-weight: 500; color: var(--dim); font-size: 11px; letter-spacing: .02em; }
+  .spacer { flex: 1; }
+  .pill {
+    display: inline-flex; align-items: center; gap: 7px; padding: 5px 11px; border-radius: 999px;
+    font-size: 11.5px; font-weight: 700; border: 1px solid var(--line); background: var(--panel-2); color: var(--dim);
+  }
+  .pill .dot { width: 8px; height: 8px; border-radius: 50%; background: var(--dim); }
+  .pill[data-state="waiting"] { color: #ffd377; border-color: rgba(254,188,46,.35); }
+  .pill[data-state="waiting"] .dot { background: var(--warn); animation: blink 1.2s ease-in-out infinite; }
+  .pill[data-state="connected"] { color: #8ef0a4; border-color: rgba(40,200,64,.35); }
+  .pill[data-state="connected"] .dot { background: var(--ok); animation: blink 1.6s ease-in-out infinite; }
+  @keyframes blink { 50% { opacity: .35; } }
+  .btn {
+    border: 1px solid var(--line); background: var(--panel-2); color: var(--text);
+    padding: 8px 13px; border-radius: 10px; font: inherit; font-size: 12.5px; font-weight: 600; cursor: pointer;
+  }
+  .btn:hover { border-color: var(--primary-border); color: #fff; }
+  .btn-primary { background: var(--primary); border-color: transparent; color: #05100e; }
+  .btn-primary:hover { filter: brightness(1.1); color: #05100e; }
+  .btn-danger:hover { border-color: rgba(255,95,87,.6); color: #ffb4b0; }
+  .btn[disabled] { opacity: .45; cursor: not-allowed; }
+  main { flex: 1; display: grid; grid-template-columns: minmax(0, 1fr) 340px; gap: 16px; padding: 16px; align-items: start; }
+  @media (max-width: 980px) { main { grid-template-columns: minmax(0, 1fr); } }
+  .card { background: var(--panel); border: 1px solid var(--line); border-radius: 16px; padding: 14px; }
+  .card + .card { margin-top: 14px; }
+  .card h3 { margin: 0 0 10px; font-size: 12px; text-transform: uppercase; letter-spacing: .07em; color: var(--dim); }
+  .stage-shell { position: relative; }
+  .stage {
+    position: relative; width: 100%; aspect-ratio: 16 / 10; background: #05070b;
+    border: 1px solid var(--line); border-radius: 16px; overflow: hidden;
+    background-image: linear-gradient(rgba(255,255,255,.045) 1px, transparent 1px), linear-gradient(90deg, rgba(255,255,255,.045) 1px, transparent 1px);
+    background-size: 28px 28px;
+  }
+  .stage video, .stage canvas.feed, .stage canvas.ink {
+    position: absolute; inset: 0; width: 100%; height: 100%;
+  }
+  .stage video { object-fit: contain; background: #000; display: none; z-index: 2; }
+  .stage canvas.ink { z-index: 3; cursor: crosshair; touch-action: none; }
+  .stage[data-tool="laser"] canvas.ink { cursor: cell; }
+  .stage[data-tool="type"] canvas.ink { cursor: text; }
+  .stage-empty {
+    position: absolute; inset: 0; z-index: 4; display: flex; flex-direction: column; gap: 8px;
+    align-items: center; justify-content: center; text-align: center; padding: 24px; color: var(--dim);
+    background: rgba(10,12,16,.82);
+  }
+  .stage-empty strong { color: var(--text); font-size: 15px; }
+  .stage-empty code { font-family: var(--mono); font-size: 12px; color: #9fe9dc; }
+  .badge {
+    position: absolute; z-index: 5; top: 10px; left: 10px; display: inline-flex; align-items: center; gap: 7px;
+    padding: 4px 10px; border-radius: 999px; background: rgba(10,12,16,.82); border: 1px solid var(--line);
+    font-size: 10.5px; font-weight: 700; letter-spacing: .06em; text-transform: uppercase; color: var(--dim);
+    pointer-events: none;
+  }
+  .badge b { width: 7px; height: 7px; border-radius: 50%; background: var(--warn); }
+  .badge[data-live="1"] b { background: var(--ok); animation: blink 1.4s ease-in-out infinite; }
+  .toolbar { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; margin-top: 12px; }
+  .tool {
+    display: inline-flex; align-items: center; gap: 7px; padding: 8px 12px; border-radius: 10px;
+    border: 1px solid var(--line); background: var(--panel-2); color: var(--dim); font: inherit;
+    font-size: 12.5px; font-weight: 600; cursor: pointer;
+  }
+  .tool[aria-pressed="true"] { background: var(--primary-dim); border-color: var(--primary-border); color: #9fe9dc; }
+  .tool kbd { font-family: var(--mono); font-size: 10px; opacity: .7; }
+  #typeText {
+    flex: 1; min-width: 180px; padding: 9px 11px; border-radius: 10px; border: 1px solid var(--line);
+    background: var(--panel-2); color: var(--text); font: inherit; font-size: 12.5px;
+  }
+  .hint { color: var(--dim); font-size: 12px; margin-top: 10px; line-height: 1.55; }
+  .rows { display: grid; gap: 8px; }
+  .row { display: flex; gap: 10px; font-size: 12.5px; }
+  .row span:first-child { color: var(--dim); min-width: 92px; flex: none; }
+  .row span:last-child { word-break: break-word; }
+  .log { max-height: 240px; overflow: auto; font-family: var(--mono); font-size: 11.5px; line-height: 1.55; }
+  .log div { display: flex; gap: 8px; padding: 3px 0; border-bottom: 1px dashed rgba(255,255,255,.045); }
+  .log time { color: #6d768a; flex: none; }
+  .log .cmd { color: #9fe9dc; }
+  .log .warn { color: #ffd377; }
+  .log .err { color: #ffa7a1; }
+  .snap { width: 100%; border-radius: 10px; border: 1px solid var(--line); display: block; cursor: zoom-in; }
+  .snap-empty { color: var(--dim); font-size: 12.5px; }
+  .answers { margin: 0; padding: 0; list-style: none; }
+  .answers li { padding: 7px 10px; border-radius: 9px; background: var(--panel-2); margin-bottom: 7px; font-size: 12.5px; }
+  .answers b { display: block; color: var(--dim); font-size: 10.5px; text-transform: uppercase; letter-spacing: .05em; font-weight: 700; }
+  .toast {
+    position: fixed; left: 50%; bottom: 22px; transform: translateX(-50%) translateY(20px);
+    background: #10131a; border: 1px solid var(--primary-border); color: var(--text);
+    padding: 9px 15px; border-radius: 999px; font-size: 12.5px; opacity: 0; pointer-events: none;
+    transition: opacity .2s ease, transform .2s ease; z-index: 20;
+  }
+  .toast.show { opacity: 1; transform: translateX(-50%) translateY(0); }
+  .modal {
+    position: fixed; inset: 0; z-index: 40; background: rgba(5,7,11,.88); display: none;
+    align-items: center; justify-content: center; padding: 24px;
+  }
+  .modal.open { display: flex; }
+  .modal img { max-width: 96vw; max-height: 92vh; border-radius: 12px; border: 1px solid var(--line); }
+</style>
+</head>
+<body>
+<header>
+  <div class="logo">
+    <i></i>
+    <div>SupportLayer<small>Agent Console</small></div>
+  </div>
+  <span class="pill" id="statusPill" data-state="idle"><span class="dot"></span><span id="statusText">No session</span></span>
+  <span class="pill" id="modePill" hidden>mode: <b id="modeText">–</b></span>
+  <div class="spacer"></div>
+  <button class="btn" id="clearBtn" type="button">Clear overlay</button>
+  <button class="btn btn-danger" id="endBtn" type="button" disabled>End session</button>
+</header>
+
+<main>
+  <section class="stage-shell">
+    <div class="stage" id="stage" data-tool="laser">
+      <video id="video" playsinline autoplay muted></video>
+      <canvas class="feed" id="sim"></canvas>
+      <canvas class="ink" id="ink"></canvas>
+      <span class="badge" id="feedBadge"><b></b><span id="feedBadgeText">Waiting for a session</span></span>
+      <div class="stage-empty" id="stageEmpty">
+        <strong>Waiting for a customer to connect…</strong>
+        <span>Open <code>agent.html?peer=&lt;client-peer-id&gt;</code>, or try the
+          <a href="index.html#demo">simulated demo</a>.</span>
+        <span style="font-size:11.5px">Add <code>&amp;demo=1</code> to connect over the local loopback bus instead of PeerJS.</span>
+      </div>
+    </div>
+
+    <div class="toolbar">
+      <button class="tool" type="button" data-tool="laser" aria-pressed="true">Laser click <kbd>1</kbd></button>
+      <button class="tool" type="button" data-tool="draw" aria-pressed="false">Draw <kbd>2</kbd></button>
+      <button class="tool" type="button" data-tool="type" aria-pressed="false">Type <kbd>3</kbd></button>
+      <input id="typeText" type="text" placeholder="Text to place in the customer's field">
+      <button class="btn" id="pingBtn" type="button">Ping</button>
+    </div>
+    <p class="hint" id="hintText">
+      <b>Laser click</b> — click the feed to point at the customer's screen and fire a real DOM click.
+      <b>Draw</b> — drag to draw over their screen; strokes block interaction and clear after 3s.
+      <b>Type</b> — click a field to highlight it and hand over the text for review.
+    </p>
+  </section>
+
+  <aside>
+    <div class="card">
+      <h3>Session</h3>
+      <div class="rows" id="sessionRows">
+        <div class="row"><span>Status</span><span id="sStatus">Disconnected</span></div>
+        <div class="row"><span>Session ID</span><span id="sId">–</span></div>
+        <div class="row"><span>Customer URL</span><span id="sUrl">–</span></div>
+        <div class="row"><span>Viewport</span><span id="sViewport">–</span></div>
+        <div class="row"><span>Browser</span><span id="sUa">–</span></div>
+        <div class="row"><span>Privacy</span><span id="sPrivacy">–</span></div>
+      </div>
+    </div>
+
+    <div class="card">
+      <h3>Snapshot at request time</h3>
+      <img class="snap" id="snap" hidden alt="Customer viewport snapshot">
+      <p class="snap-empty" id="snapEmpty">No snapshot yet — it arrives with the session handshake.</p>
+    </div>
+
+    <div class="card">
+      <h3>Customer answers</h3>
+      <ul class="answers" id="answers"><li>Nothing yet.</li></ul>
+    </div>
+
+    <div class="card">
+      <h3>Activity</h3>
+      <div class="log" id="log"></div>
+    </div>
+  </aside>
+</main>
+
+<div class="toast" id="toast"></div>
+<div class="modal" id="modal"><img id="modalImg" alt="Snapshot"></div>
+
+<script>
+(function () {
+  "use strict";
+
+  /* ------------------------------------------------------------------ *
+   * Elements + config
+   * ------------------------------------------------------------------ */
+  var $ = function (id) { return document.getElementById(id); };
+  var video = $("video"), sim = $("sim"), ink = $("ink"), stage = $("stage");
+  var simCtx = sim.getContext("2d"), inkCtx = ink.getContext("2d");
+
+  var params = new URLSearchParams(location.search);
+  var clientPeerId = params.get("peer") || params.get("peerId") || "";
+  var DEMO = params.get("demo") === "1" || params.get("demo") === "true";
+  var AGENT_ID = "agent-" + Math.random().toString(36).slice(2, 9);
+  var PEER_CDN = params.get("peerjs") || "https://unpkg.com/peerjs@1.5.5/dist/peerjs.min.js";
+  var BUS = "supportlayer-bus";
+  var THEME = "#14b8a6";
+
+  var connected = false;
+  var client = null;          // { url, title, viewport:{w,h}, mode, geometry, capture_label, ... }
+  var tool = "laser";
+  var drawing = false;
+  var strokes = [];           // local mirror of what we sent
+  var currentStroke = null;
+  var pendingPoints = [];
+  var pendingStart = false;
+  var flushQueued = false;
+  var clearTimer = null;
+  var bus = null;
+  var peer = null;
+  var conn = null;
+  var remoteStream = null;
+  var mapping = "auto";       // auto | window | screen
+
+  /* ------------------------------------------------------------------ *
+   * Logging + chrome
+   * ------------------------------------------------------------------ */
+  function log(text, kind) {
+    var el = document.createElement("div");
+    var t = document.createElement("time");
+    var d = new Date();
+    t.textContent = String(d.getHours()).padStart(2, "0") + ":" + String(d.getMinutes()).padStart(2, "0") + ":" + String(d.getSeconds()).padStart(2, "0");
+    var s = document.createElement("span");
+    if (kind) s.className = kind;
+    s.textContent = text;
+    el.appendChild(t); el.appendChild(s);
+    var box = $("log");
+    box.appendChild(el);
+    while (box.children.length > 250) box.removeChild(box.firstChild);
+    box.scrollTop = box.scrollHeight;
+  }
+
+  function toast(msg) {
+    var el = $("toast");
+    el.textContent = msg;
+    el.classList.add("show");
+    clearTimeout(el._t);
+    el._t = setTimeout(function () { el.classList.remove("show"); }, 2600);
+  }
+
+  function setStatus(state, text) {
+    $("statusPill").dataset.state = state;
+    $("statusText").textContent = text;
+    $("sStatus").textContent = text;
+    $("feedBadge").dataset.live = state === "connected" ? "1" : "0";
+    $("endBtn").disabled = !connected;
+  }
+
+  /* ------------------------------------------------------------------ *
+   * Transport: loopback bus (demo) or PeerJS (real)
+   * ------------------------------------------------------------------ */
+  function send(obj) {
+    if (DEMO) {
+      if (!bus) return false;
+      bus.postMessage({ dir: "agent\u2192client", to: clientPeerId, data: obj });
+      return true;
+    }
+    if (conn && conn.open) { conn.send(obj); return true; }
+    return false;
+  }
+
+  function onWire(msg) {
+    msg = msg || {};
+    switch (msg.t) {
+      case "announce":
+        if (!clientPeerId) {
+          clientPeerId = msg.to || "";
+          log("customer announced (" + (msg.mode || "?") + ") \u2014 dialing in", "cmd");
+          greet();
+        }
+        break;
+      case "meta":
+        client = msg;
+        renderClient();
+        $("stageEmpty").style.display = "none";
+        log("handshake: " + (msg.url || "unknown url"), "cmd");
+        break;
+      case "session":
+        renderAnswers(msg.values || {});
+        if (msg.privacy) {
+          $("sPrivacy").textContent =
+            (msg.privacy.selectors || 0) + " selector(s), " + (msg.privacy.texts || 0) + " text node(s)"
+            + (msg.privacy.demo ? " (simulated)" : "");
+        }
+        log("session brief received", "cmd");
+        break;
+      case "snapshot":
+        if (msg.data) showSnapshot(msg.data, msg.captured);
+        break;
+      case "screen-share-began":
+        log("customer started sharing their screen", "cmd");
+        markScreenLive();
+        break;
+      case "screen-share-ended":
+        log("customer stopped sharing", "warn");
+        break;
+      case "simulated-screen":
+        log("customer enabled simulated screen share", "cmd");
+        markScreenLive();
+        break;
+      case "pong":
+        toast("Pong \u2014 round trip " + Math.max(0, Date.now() - (msg.at || Date.now())) + "ms");
+        break;
+      case "bye":
+        log("customer left the session", "warn");
+        teardown("Customer disconnected");
+        break;
+      default:
+        log("unknown client message: " + msg.t, "warn");
+    }
+  }
+
+  function greet() {
+    if (!clientPeerId) return;
+    send({ t: "hello", agentPeerId: AGENT_ID });
+    connected = true;
+    setStatus("connected", "Connected");
+    $("stageEmpty").style.display = "none";
+    $("modePill").hidden = false;
+    $("modeText").textContent = (client && client.mode) || "live";
+    log("sent hello (agent peer " + AGENT_ID + ")", "cmd");
+  }
+
+  function teardown(message) {
+    connected = false;
+    setStatus("idle", message || "Disconnected");
+    $("feedBadge").dataset.live = "0";
+    if (remoteStream) {
+      try { remoteStream.getTracks().forEach(function (t) { t.stop(); }); } catch (e) {}
+      remoteStream = null;
+    }
+    video.srcObject = null;
+    video.style.display = "none";
+  }
+
+  function connect() {
+    if (DEMO) {
+      try {
+        bus = new BroadcastChannel(BUS);
+      } catch (e) {
+        $("stageEmpty").innerHTML = "<strong>Loopback unavailable</strong><span>This browser has no BroadcastChannel.</span>";
+        return;
+      }
+      bus.onmessage = function (ev) {
+        var m = ev.data || {};
+        if (m.dir !== "client\u2192agent") return;
+        var d = m.data || {};
+        if (d.t === "announce") {
+          if (!clientPeerId && m.to) clientPeerId = m.to;
+          if (!connected && (!clientPeerId || m.to === clientPeerId)) {
+            log("loopback: customer found (" + clientPeerId + ")", "cmd");
+            greet();
+          }
+          return;
+        }
+        onWire(d);
+      };
+      setStatus("waiting", "Waiting for customer");
+      log("listening on the loopback bus (demo mode)", "cmd");
+      // Ask anyone already listening to re-announce.
+      bus.postMessage({ dir: "agent\u2192client", to: "", data: { t: "who-is-there" } });
+      setInterval(function () {
+        if (!connected && bus) bus.postMessage({ dir: "agent\u2192client", to: "", data: { t: "who-is-there" } });
+      }, 1500);
+      return;
+    }
+
+    if (!clientPeerId) {
+      setStatus("idle", "Missing ?peer=");
+      log("no ?peer=<client-id> in the URL \u2014 nothing to dial", "err");
+      return;
+    }
+    setStatus("waiting", "Dialing " + clientPeerId.slice(0, 10) + "…");
+
+    function start(Peer) {
+      peer = new Peer(AGENT_ID, { debug: 0 });
+      peer.on("open", function () {
+        log("agent peer online: " + AGENT_ID, "cmd");
+        dial();
+      });
+      peer.on("call", function (call) {
+        log("incoming media call from customer", "cmd");
+        var mode = (client && client.mode) || "chat";
+        var answer = function (stream) {
+          try {
+            call.answer(stream || new MediaStream());
+          } catch (e) {
+            log("answer failed: " + (e && e.message), "err");
+          }
+        };
+        if ((mode === "audio" || mode === "video") && navigator.mediaDevices && navigator.mediaDevices.getUserMedia) {
+          navigator.mediaDevices
+            .getUserMedia({ audio: true, video: mode === "video" })
+            .then(function (local) {
+              log("sharing my " + (mode === "video" ? "camera + mic" : "mic") + " with the customer", "cmd");
+              answer(local);
+            })
+            .catch(function () {
+              log("mic/camera permission denied — answering without local media", "warn");
+              answer(null);
+            });
+        } else {
+          answer(null);
+        }
+        call.on("stream", function (stream) {
+          if (stream && stream.getVideoTracks().length) {
+            remoteStream = stream;
+            video.srcObject = stream;
+            video.style.display = "block";
+            markScreenLive();
+            log("receiving customer screen stream", "cmd");
+          }
+        });
+      });
+      peer.on("error", function (err) {
+        var type = (err && err.type) || "error";
+        log("peer error: " + type, "err");
+        if (type === "peer-unavailable") toast("Customer link is not listening anymore.");
+      });
+    }
+
+    if (window.Peer) return start(window.Peer);
+    var s = document.createElement("script");
+    s.src = PEER_CDN;
+    s.onload = function () { window.Peer ? start(window.Peer) : log("PeerJS failed to expose window.Peer", "err"); };
+    s.onerror = function () { log("could not load PeerJS from " + PEER_CDN, "err"); };
+    document.head.appendChild(s);
+  }
+
+  function dial() {
+    if (!peer || !clientPeerId) return;
+    conn = peer.connect(clientPeerId, { reliable: true, metadata: { role: "agent" } });
+    conn.on("open", function () {
+      connected = true;
+      setStatus("connected", "Connected");
+      greet();
+    });
+    conn.on("data", function (d) { onWire(d); });
+    conn.on("close", function () { teardown("Customer disconnected"); });
+    conn.on("error", function (err) { log("data channel error: " + (err && err.message), "err"); });
+  }
+
+  function markScreenLive() {
+    $("feedBadgeText").textContent = DEMO ? "SIMULATED FEED \u00b7 commands are real" : "Live customer screen";
+    drawSimulatedFeed();
+  }
+
+  /* ------------------------------------------------------------------ *
+   * Feed rendering
+   * ------------------------------------------------------------------ */
+  function clientAspect() {
+    if (client && client.viewport && client.viewport.w && client.viewport.h) {
+      return client.viewport.w / client.viewport.h;
+    }
+    return 16 / 10;
+  }
+
+  function sizeStage() {
+    var a = clientAspect();
+    stage.style.aspectRatio = a.toFixed(4);
+    var rect = stage.getBoundingClientRect();
+    var dpr = Math.min(2, window.devicePixelRatio || 1);
+    [sim, ink].forEach(function (c) {
+      c.width = Math.max(1, Math.round(rect.width * dpr));
+      c.height = Math.max(1, Math.round(rect.height * dpr));
+    });
+    drawSimulatedFeed();
+    redrawInk();
+  }
+
+  /** The demo feed is a rendering of a checkout screen — labelled as simulated. */
+  function drawSimulatedFeed() {
+    var dpr = Math.min(2, window.devicePixelRatio || 1);
+    var w = sim.width, h = sim.height;
+    simCtx.setTransform(1, 0, 0, 1, 0, 0);
+    simCtx.clearRect(0, 0, w, h);
+    simCtx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    var W = w / dpr, H = h / dpr;
+    var S = W / 1280;   // scale everything off a 1280-wide mock
+
+    simCtx.fillStyle = "#0d1017";
+    simCtx.fillRect(0, 0, W, H);
+    // top chrome
+    simCtx.fillStyle = "#161a22";
+    simCtx.fillRect(0, 0, W, 34 * S);
+    ["#ff5f57", "#febc2e", "#28c840"].forEach(function (c, i) {
+      simCtx.fillStyle = c;
+      simCtx.beginPath();
+      simCtx.arc((16 + i * 17) * S, 17 * S, 5 * S, 0, Math.PI * 2);
+      simCtx.fill();
+    });
+    simCtx.fillStyle = "#232935";
+    simCtx.fillRect(80 * S, 9 * S, W - 110 * S, 16 * S);
+    simCtx.fillStyle = "#7d8698";
+    simCtx.font = Math.round(10 * S) + "px " + getComputedStyle(document.body).fontFamily;
+    simCtx.fillText((client && client.url) || "https://shop.example.com/checkout", 88 * S, 21 * S);
+
+    // app header
+    simCtx.fillStyle = "#111721";
+    simCtx.fillRect(0, 34 * S, W, 46 * S);
+    simCtx.fillStyle = "#1d2532";
+    simCtx.fillRect(28 * S, 46 * S, 120 * S, 14 * S);
+    simCtx.fillStyle = THEME;
+    simCtx.font = "bold " + Math.round(15 * S) + "px " + getComputedStyle(document.body).fontFamily;
+    simCtx.fillText("Sunny Bakery", 28 * S, 58 * S);
+    for (var i = 0; i < 4; i++) {
+      simCtx.fillStyle = "#2b3444";
+      simCtx.fillRect((W - 420 + i * 96) * S, 50 * S, 72 * S, 8 * S);
+    }
+
+    var pad = 28 * S;
+    var leftW = W - 380 * S - pad * 2;
+    // product rows
+    for (var r = 0; r < 4; r++) {
+      var y = 110 * S + r * 78 * S;
+      simCtx.fillStyle = "#151b25";
+      simCtx.fillRect(pad, y, leftW, 62 * S);
+      simCtx.fillStyle = "#23303f";
+      simCtx.fillRect(pad + 12 * S, y + 10 * S, 42 * S, 42 * S);
+      simCtx.fillStyle = "#2c3646";
+      simCtx.fillRect(pad + 68 * S, y + 16 * S, 190 * S, 9 * S);
+      simCtx.fillRect(pad + 68 * S, y + 33 * S, 120 * S, 7 * S);
+      simCtx.fillStyle = THEME;
+      simCtx.fillRect(pad + leftW - 84 * S, y + 22 * S, 66 * S, 20 * S);
+    }
+
+    // checkout column
+    var colX = W - 352 * S;
+    simCtx.fillStyle = "#131a24";
+    simCtx.fillRect(colX, 110 * S, 324 * S, H - 150 * S);
+    simCtx.fillStyle = "#8e9aad";
+    simCtx.font = "bold " + Math.round(13 * S) + "px " + getComputedStyle(document.body).fontFamily;
+    simCtx.fillText("Order summary", colX + 18 * S, 138 * S);
+    ["Card ending \u2022\u2022\u2022\u2022 4242", "jane.doe@example.com", "SSN on file"].forEach(function (label, i) {
+      simCtx.fillStyle = "#2b3648";
+      simCtx.fillRect(colX + 18 * S, (158 + i * 34) * S, 288 * S, 26 * S);
+      simCtx.fillStyle = "#6d768a";
+      simCtx.font = Math.round(11 * S) + "px " + getComputedStyle(document.body).fontFamily;
+      simCtx.fillText("\u2588\u2588\u2588\u2588\u2588\u2588  " + label + "  (redacted)", colX + 26 * S, (175 + i * 34) * S);
+    });
+    simCtx.fillStyle = THEME;
+    simCtx.globalAlpha = 0.92;
+    simCtx.fillRect(colX + 18 * S, (H - 108) * S, 288 * S, 40 * S);
+    simCtx.globalAlpha = 1;
+    simCtx.fillStyle = "#05100e";
+    simCtx.font = "bold " + Math.round(13 * S) + "px " + getComputedStyle(document.body).fontFamily;
+    simCtx.fillText("Complete purchase", colX + 88 * S, (H - 83) * S);
+
+    // watermark
+    simCtx.fillStyle = "rgba(254,188,46,.85)";
+    simCtx.font = "bold " + Math.round(10.5 * S) + "px " + getComputedStyle(document.body).fontFamily;
+    simCtx.fillText("SIMULATED FEED \u2014 clicks, drawing and typing land on the real customer page.", 28 * S, (H - 22) * S);
+  }
+
+  function redrawInk() {
+    var dpr = Math.min(2, window.devicePixelRatio || 1);
+    inkCtx.setTransform(1, 0, 0, 1, 0, 0);
+    inkCtx.clearRect(0, 0, ink.width, ink.height);
+    inkCtx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    inkCtx.lineCap = "round";
+    inkCtx.lineJoin = "round";
+    inkCtx.strokeStyle = THEME;
+    inkCtx.lineWidth = 3;
+    strokes.forEach(function (s) {
+      if (s.length < 2) return;
+      inkCtx.beginPath();
+      inkCtx.moveTo(s[0].x, s[0].y);
+      for (var i = 1; i < s.length; i++) inkCtx.lineTo(s[i].x, s[i].y);
+      inkCtx.stroke();
+    });
+  }
+
+  /* ------------------------------------------------------------------ *
+   * Coordinate normalization — normalized 0..1 of the CUSTOMER viewport
+   * ------------------------------------------------------------------ */
+  function stageRect() { return stage.getBoundingClientRect(); }
+
+  function normalize(cx, cy) {
+    var box = stageRect();
+    var x = (cx - box.left) / box.width;
+    var y = (cy - box.top) / box.height;
+
+    // Correct for letterboxing when the video aspect differs from the box.
+    if (video.videoWidth && video.videoHeight) {
+      var boxAspect = box.width / box.height;
+      var vidAspect = video.videoWidth / video.videoHeight;
+      if (Math.abs(boxAspect - vidAspect) > 0.01) {
+        var scale = vidAspect > boxAspect ? box.width / video.videoWidth : box.height / video.videoHeight;
+        var dw = video.videoWidth * scale, dh = video.videoHeight * scale;
+        var offX = (box.width - dw) / 2, offY = (box.height - dh) / 2;
+        x = (cx - box.left - offX) / dw;
+        y = (cy - box.top - offY) / dh;
+      }
+    }
+
+    // Whole-screen capture: the page is a box inside the frame. Offset it back.
+    if (useScreenMapping() && client && client.geometry) {
+      var g = client.geometry;
+      var frameW = video.videoWidth || 1920;
+      var frameH = video.videoHeight || 1080;
+      var sxs = frameW / (g.screen_width * g.device_pixel_ratio || frameW);
+      var sys = frameH / (g.screen_height * g.device_pixel_ratio || frameH);
+      x = (x * frameW - g.screen_x * sxs) / Math.max(1, g.outer_width * sxs);
+      y = (y * frameH - g.screen_y * sys) / Math.max(1, g.outer_height * sys);
+    }
+
+    return {
+      x: Math.min(1, Math.max(0, x)),
+      y: Math.min(1, Math.max(0, y)),
+      px: Math.min(box.width, Math.max(0, cx - box.left)),
+      py: Math.min(box.height, Math.max(0, cy - box.top))
+    };
+  }
+
+  function useScreenMapping() {
+    if (mapping === "screen") return true;
+    if (mapping === "window") return false;
+    var label = (client && client.capture_label) || "";
+    return /screen|display|monitor|entire/i.test(label);
+  }
+
+  /* ------------------------------------------------------------------ *
+   * Tools
+   * ------------------------------------------------------------------ */
+  function setTool(next) {
+    tool = next;
+    stage.dataset.tool = next;
+    Array.prototype.forEach.call(document.querySelectorAll(".tool[data-tool]"), function (b) {
+      b.setAttribute("aria-pressed", String(b.dataset.tool === next));
+    });
+    if (next !== "draw") finishStroke();
+  }
+
+  Array.prototype.forEach.call(document.querySelectorAll(".tool[data-tool]"), function (btn) {
+    btn.addEventListener("click", function () { setTool(btn.dataset.tool); });
+  });
+  document.addEventListener("keydown", function (e) {
+    if (e.target && (e.target.tagName === "INPUT" || e.target.tagName === "TEXTAREA")) return;
+    if (e.key === "1") setTool("laser");
+    else if (e.key === "2") setTool("draw");
+    else if (e.key === "3") setTool("type");
+    else if (e.key === "Escape") clearOverlay(true);
+  });
+
+  function localLaser(px, py) {
+    var el = document.createElement("span");
+    el.style.cssText = "position:absolute;left:" + px + "px;top:" + py + "px;width:22px;height:22px;margin:-11px 0 0 -11px;border-radius:50%;" +
+      "background:radial-gradient(circle,#fff 0 18%," + THEME + " 20% 46%,transparent 62%);z-index:4;pointer-events:none;transition:opacity .5s ease;opacity:1";
+    stage.appendChild(el);
+    setTimeout(function () { el.style.opacity = "0"; }, 700);
+    setTimeout(function () { el.remove(); }, 1300);
+  }
+
+  ink.addEventListener("pointerdown", function (e) {
+    if (!connected) { toast("No customer connected yet."); return; }
+    var p = normalize(e.clientX, e.clientY);
+    if (tool === "laser") {
+      localLaser(p.px, p.py);
+      send({ t: "click", x: round3(p.x), y: round3(p.y) });
+      log("click \u2192 " + round3(p.x) + ", " + round3(p.y), "cmd");
+      return;
+    }
+    if (tool === "type") {
+      var text = $("typeText").value;
+      if (!text.trim()) {
+        toast("Type the text to place first, then click the field.");
+        $("typeText").focus();
+        return;
+      }
+      localLaser(p.px, p.py);
+      send({ t: "type", x: round3(p.x), y: round3(p.y), text: text });
+      log("type \u2192 " + round3(p.x) + ", " + round3(p.y) + ' : "' + text.slice(0, 40) + '"', "cmd");
+      return;
+    }
+    // draw
+    drawing = true;
+    currentStroke = [];
+    strokes.push(currentStroke);
+    ink.setPointerCapture && ink.setPointerCapture(e.pointerId);
+    addPoint(p.px, p.py, p.x, p.y, true);
+  });
+
+  ink.addEventListener("pointermove", function (e) {
+    if (!drawing || tool !== "draw") return;
+    var p = normalize(e.clientX, e.clientY);
+    addPoint(p.px, p.py, p.x, p.y, false);
+  });
+
+  function endStroke() {
+    if (!drawing) return;
+    drawing = false;
+    flushStroke();
+    log("stroke finished", "cmd");
+    armClear();
+  }
+  ink.addEventListener("pointerup", endStroke);
+  ink.addEventListener("pointercancel", endStroke);
+  ink.addEventListener("pointerleave", endStroke);
+
+  function addPoint(px, py, x, y, start) {
+    currentStroke.push({ x: px, y: py });
+    pendingPoints.push({ x: round3(x), y: round3(y) });
+    if (start) pendingStart = true;
+    redrawInk();
+    if (start || !flushQueued) {
+      flushQueued = true;
+      requestAnimationFrame(flushStroke);
+    }
+    armClear();
+  }
+
+  /** Batched at ~60fps: only the new points travel over the channel. */
+  function flushStroke() {
+    flushQueued = false;
+    if (!pendingPoints.length) return;
+    var batch = pendingPoints;
+    pendingPoints = [];
+    send({ t: "draw", points: batch, start: pendingStart, color: THEME, width: 3 });
+    pendingStart = false;
+  }
+
+  function finishStroke() {
+    if (drawing) endStroke();
+  }
+
+  function armClear() {
+    clearTimeout(clearTimer);
+    clearTimer = setTimeout(function () { clearOverlay(true); }, 3000);
+  }
+
+  function clearOverlay(notify) {
+    clearTimeout(clearTimer);
+    strokes = [];
+    currentStroke = null;
+    pendingPoints = [];
+    pendingStart = false;
+    redrawInk();
+    if (notify) send({ t: "clear" });
+  }
+
+  $("clearBtn").addEventListener("click", function () {
+    clearOverlay(true);
+    log("overlay cleared", "cmd");
+  });
+
+  $("typeText").addEventListener("keydown", function (e) {
+    if (e.key === "Enter" && this.value.trim()) {
+      setTool("type");
+      toast("Now click the field on the customer's screen.");
+    }
+  });
+
+  $("pingBtn").addEventListener("click", function () {
+    if (!connected) { toast("No customer connected yet."); return; }
+    send({ t: "ping" });
+    log("ping sent", "cmd");
+  });
+
+  $("endBtn").addEventListener("click", function () {
+    if (!connected) return;
+    send({ t: "end" });
+    log("end-session command sent", "warn");
+    teardown("Session ended");
+  });
+
+  /* ------------------------------------------------------------------ *
+   * Right rail rendering
+   * ------------------------------------------------------------------ */
+  function renderClient() {
+    if (!client) return;
+    $("sId").textContent = clientPeekId();
+    $("sUrl").textContent = client.url || "–";
+    $("sViewport").textContent = client.viewport ? client.viewport.w + " × " + client.viewport.h : "–";
+    $("sUa").textContent = client.ua || navigator.userAgent.slice(0, 90) + "…";
+    $("modeText").textContent = client.mode || "live";
+    $("modePill").hidden = false;
+    $("sPrivacy").textContent = client.privacy_summary || "applied before capture";
+    if (client.title) document.title = client.title + " — Agent Console";
+    $("feedBadgeText").textContent = DEMO ? "SIMULATED FEED \u00b7 commands are real" : "Live customer screen";
+  }
+
+  function clientPeekId() {
+    return clientPeerId ? clientPeerId : "–";
+  }
+
+  function renderAnswers(values) {
+    var keys = Object.keys(values || {});
+    var box = $("answers");
+    box.innerHTML = "";
+    if (!keys.length) {
+      box.innerHTML = "<li>No fields were submitted.</li>";
+      return;
+    }
+    keys.forEach(function (k) {
+      var li = document.createElement("li");
+      var b = document.createElement("b");
+      b.textContent = k;
+      li.appendChild(b);
+      li.appendChild(document.createTextNode(String(values[k])));
+      box.appendChild(li);
+    });
+  }
+
+  function showSnapshot(dataUrl, capturedAt) {
+    var img = $("snap");
+    img.src = dataUrl;
+    img.hidden = false;
+    $("snapEmpty").hidden = true;
+    log("snapshot received" + (capturedAt ? " (" + new Date(capturedAt).toLocaleTimeString() + ")" : ""), "cmd");
+  }
+
+  $("snap").addEventListener("click", function () {
+    if (!this.src) return;
+    $("modalImg").src = this.src;
+    $("modal").classList.add("open");
+  });
+  $("modal").addEventListener("click", function () { this.classList.remove("open"); });
+
+  /* ------------------------------------------------------------------ *
+   * Boot
+   * ------------------------------------------------------------------ */
+  function round3(n) { return Math.round(n * 1000) / 1000; }
+
+  window.addEventListener("resize", sizeStage);
+  sizeStage();
+  drawSimulatedFeed();
+  if (DEMO) {
+    $("feedBadgeText").textContent = "SIMULATED FEED \u00b7 waiting for customer";
+    $("hintText").innerHTML += ' <b style="color:#ffd377">Demo mode:</b> transport is the local loopback bus — no PeerJS, no network.';
+  } else {
+    $("feedBadgeText").textContent = "Live customer screen";
+  }
+  log("agent console " + (DEMO ? "(demo bus)" : "(peerjs)") + " ready", "cmd");
+  if (clientPeerId) log("target peer: " + clientPeerId, "cmd");
+
+  window.__AgentConsole = {
+    send: send, normalize: normalize, setTool: setTool, state: function () { return { connected: connected, client: client, demo: DEMO, peer: clientPeerId }; }
+  };
+
+  connect();
+})();
+</script>
+</body>
+</html>

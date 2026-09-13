@@ -1,0 +1,9 @@
+node_modules/
+test-results/
+screenshots/
+*.log
+*.tsbuildinfo
+.DS_Store
+Thumbs.db
+.devtools/
+.freebuff/
