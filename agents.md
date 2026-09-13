@@ -71,6 +71,16 @@ bundler, no runtime dependencies, no framework.
   exists so `index.html` can show a full end-to-end flow with zero backend and zero
   permissions prompt. **Never let simulated mode leak into production behavior** — the
   widget must only enter it from an explicit attribute or `?sl-demo=1`.
+- **`splitPatterns()` — not `String.split(',')` — parses `blur-selectors` / `blur-regex`:** it
+  splits on commas outside `{}`, `()` and `[]` and also accepts a JSON array, so `{2,}`
+  quantifiers and `:is(.a, .b)` selectors survive. A naive comma split silently disabled regex
+  redaction once; do not regress it.
+- **`[hidden] { display: none !important; }` is declared in the shadow stylesheet on purpose.**
+  Without it, any overlay carrying its own `display` value (`.sl-draw-hint`) stays visible and
+  blocks host clicks even while `hidden` is set.
+- **The loopback announce loop must die with its transport.** It stops on connect, on
+  `close()`, and after 200 tries, and it captures `peerId` locally instead of reading
+  `session` — otherwise a timer fires after teardown and throws on a null session.
 
 ## Agent dashboard (`agent.html`)
 
@@ -82,9 +92,30 @@ bundler, no runtime dependencies, no framework.
   it are real and land on the real page.
 - Keep the log pane honest: every outgoing command is echoed with a timestamp.
 
+## Demo architecture (`index.html`)
+
+The landing page's demo is three real pieces wired together, not a mock:
+
+1. `demo-app.html` in an iframe — a genuine customer page running the genuine widget.
+2. `agent.html?demo=1` in a second iframe — the genuine console, talking over the `BroadcastChannel` loopback bus.
+3. A payload inspector in the parent page — fed by the demo app's `postMessage` bridge of
+   `supportlayer:webhook`, plus polling of `SupportLayer.getState()` and `__AgentConsole.state()`.
+
+The customer frame is its own document on purpose: its viewport *is* the customer viewport, so the coordinates the
+agent sends land exactly where the agent clicked. Do not move the demo app into the parent document — the mapping
+breaks and the FAB/panel would cover the marketing page.
+
 ## Testing
 
 - `npm start` then `node tests/e2e.mjs` (headless) or `node tests/e2e.mjs --headed`.
+- The suite must stay green in **both** modes on every change: 84 checks cover config parsing, the request flow,
+  redaction round-trips, coordinate accuracy (±12px), drawing auto-clear, directed typing, reload/resume, teardown,
+  the harness assertions, and desktop/mobile layout. Headed runs have historically caught bugs headless missed
+  (a loopback timer firing after teardown, the always-visible draw hint).
+- **Idle pages must show zero agent chrome.** The overlay elements (`canvas.sl-draw`,
+  `.sl-laser`, `.sl-draw-hint`, `.sl-typing`) all default to hidden and are only revealed
+  while an agent command is live; the layout test asserts this on an idle page.
+- `PORT=0` is exported by some shells and means "unset" — both `serve.js` and the test runner treat it that way.
 - Both Chromium modes matter. Headless catches logic/console/network errors; **headed**
   catches rendering, `getDisplayMedia` permission flow, hover/focus behavior, and
   anything that depends on real window geometry.

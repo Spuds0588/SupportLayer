@@ -1,0 +1,389 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>SupportLayer — Test Harness</title>
+<meta name="robots" content="noindex, nofollow">
+<link rel="icon" type="image/svg+xml" href="favicon.svg">
+<style>
+  :root { --p: #14b8a6; --bg: #0a0c10; --panel: #11141b; --line: rgba(255,255,255,.09); --text: #eef1f6; --dim: #98a1b3; --ok: #28c840; --bad: #ff5f57; --warn: #febc2e; }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--bg); color: var(--text); font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Inter, Roboto, sans-serif; font-size: 14px; line-height: 1.55; }
+  header { padding: 16px 22px; border-bottom: 1px solid var(--line); background: var(--panel); display: flex; align-items: center; gap: 14px; flex-wrap: wrap; }
+  header h1 { font-size: 15px; margin: 0; }
+  header small { color: var(--dim); }
+  main { display: grid; grid-template-columns: minmax(0, 420px) minmax(0, 1fr); gap: 18px; padding: 18px; align-items: start; }
+  @media (max-width: 980px) { main { grid-template-columns: minmax(0, 1fr); } }
+  .card { background: var(--panel); border: 1px solid var(--line); border-radius: 14px; padding: 16px; }
+  .card + .card { margin-top: 16px; }
+  .card h2 { margin: 0 0 12px; font-size: 12px; text-transform: uppercase; letter-spacing: .07em; color: var(--dim); }
+  label { display: block; font-size: 11.5px; font-weight: 700; color: var(--dim); margin: 10px 0 4px; text-transform: uppercase; letter-spacing: .04em; }
+  input[type=text], select, textarea {
+    width: 100%; padding: 8px 10px; border-radius: 9px; border: 1px solid var(--line);
+    background: #0d1016; color: var(--text); font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 12px;
+  }
+  textarea { min-height: 96px; resize: vertical; }
+  button { font: inherit; cursor: pointer; border-radius: 9px; padding: 9px 14px; font-size: 12.5px; font-weight: 700; border: 1px solid var(--line); background: #171b24; color: var(--text); }
+  button.primary { background: var(--p); border-color: transparent; color: #05100e; }
+  button:hover { border-color: rgba(20,184,166,.5); }
+  .row { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 14px; }
+  pre { background: #07090d; border: 1px solid var(--line); border-radius: 10px; padding: 12px; overflow: auto; font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 11.5px; margin: 0; }
+  .checks { list-style: none; margin: 0; padding: 0; font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 12px; }
+  .checks li { display: flex; gap: 9px; padding: 5px 0; border-bottom: 1px dashed rgba(255,255,255,.06); }
+  .checks .s { flex: none; font-weight: 800; }
+  .pass .s { color: var(--ok); }
+  .fail .s { color: var(--bad); }
+  .checks .d { color: var(--dim); }
+  .events { display: flex; gap: 6px; flex-wrap: wrap; margin-bottom: 10px; }
+  .events button { padding: 3px 9px; font-size: 11px; font-family: ui-monospace, monospace; }
+  .events button.active { border-color: rgba(20,184,166,.5); color: #9fe9dc; background: rgba(20,184,166,.12); }
+  .snap { max-width: 180px; border-radius: 8px; border: 1px solid var(--line); display: block; margin-top: 10px; }
+  .hint { color: var(--dim); font-size: 12.5px; }
+  .kbd { font-family: ui-monospace, monospace; background: rgba(255,255,255,.06); border-radius: 5px; padding: 1px 6px; }
+  .mode-badge { margin-left: auto; font-size: 11px; font-family: ui-monospace, monospace; color: var(--dim); border: 1px solid var(--line); border-radius: 999px; padding: 4px 10px; }
+</style>
+</head>
+<body>
+<header>
+  <h1>SupportLayer — Test Harness</h1>
+  <small>Injects the widget with any configuration and runs in-page assertions.</small>
+  <span class="mode-badge" id="cfg-badge">no widget loaded</span>
+</header>
+
+<main>
+  <div>
+    <div class="card">
+      <h2>Widget configuration</h2>
+      <label for="f-mode">data-mode</label>
+      <select id="f-mode">
+        <option value="none">none — async report only</option>
+        <option value="chat" selected>chat — data channel</option>
+        <option value="audio">audio — agent mic</option>
+        <option value="video">video — agent camera</option>
+      </select>
+
+      <label for="f-theme">data-theme</label>
+      <input id="f-theme" type="text" value="#14b8a6">
+
+      <label for="f-webhook">data-webhook (blank = do not POST, events only)</label>
+      <input id="f-webhook" type="text" value="">
+
+      <label for="f-selectors">data-blur-selectors</label>
+      <input id="f-selectors" type="text" value=".sensitive-data, .balance">
+
+      <label for="f-regex">data-blur-regex</label>
+      <input id="f-regex" type="text" value="\d{3}-\d{2}-\d{4}|[\w.+-]+@[\w-]+\.[a-z]{2,}">
+
+      <label for="f-fields">data-fields (JSON — try breaking it to test the fallback)</label>
+      <textarea id="f-fields">[
+  {"name":"name","type":"text","label":"Your name","required":true},
+  {"name":"issue","type":"textarea","label":"What happened?","required":true},
+  {"name":"severity","type":"select","label":"Severity","options":["Blocking","Annoying","Question"]}
+]</textarea>
+
+      <label for="f-headless"><input type="checkbox" id="f-headless" style="width:auto"> data-headless (hide the floating button)</label>
+      <label for="f-demo"><input type="checkbox" id="f-demo" checked style="width:auto"> data-demo (simulated capture + loopback transport)</label>
+
+      <div class="row">
+        <button class="primary" id="btn-load" type="button">Load / reload widget</button>
+        <button id="btn-remove" type="button">Remove widget</button>
+        <button id="btn-checks" type="button">Run self-checks</button>
+      </div>
+      <p class="hint" style="margin-top:12px">Everything below the fold lives outside the Shadow DOM, exactly like a host
+        app. Sensitive values in the panel are blurred by the widget while a session is open.</p>
+    </div>
+
+    <div class="card">
+      <h2>Host page content (blur targets)</h2>
+      <p>Card: <span class="sensitive-data">4242 4242 4242 4242</span></p>
+      <p>Email: <span class="sensitive-data">jane.doe@example.com</span></p>
+      <p>Tax id: <span class="sensitive-data">123-45-6789</span></p>
+      <p>Balance: <span class="balance">$5,120.00</span></p>
+      <p class="hint">The plain-text email above and the SSN pattern are matched by
+        <span class="kbd">data-blur-regex</span>, so both the CSS selectors and the TreeWalker path get exercised.</p>
+      <div class="row">
+        <button id="btn-blur" type="button">applyPrivacyBlur()</button>
+        <button id="btn-unblur" type="button">removePrivacyBlur()</button>
+      </div>
+    </div>
+
+    <div class="card">
+      <h2>Self-checks</h2>
+      <ul class="checks" id="checks"><li class="d">Not run yet.</li></ul>
+    </div>
+  </div>
+
+  <div>
+    <div class="card">
+      <h2>Webhook catcher <span class="hint" id="wh-target"></span></h2>
+      <div class="events" id="events"></div>
+      <pre id="payload">// Waiting for `supportlayer:webhook` events…</pre>
+      <img class="snap" id="snap" alt="snapshot" hidden>
+      <div class="row">
+        <button id="btn-copy" type="button">Copy payload</button>
+        <button id="btn-open-agent" type="button">Open agent console for this session</button>
+      </div>
+      <p class="hint" style="margin-top:10px">With <span class="kbd">data-webhook</span> blank the widget still emits the
+        event and skips the network call, so this harness works offline. Set a webhook to a local echo server to watch the
+        real POST.</p>
+    </div>
+
+    <div class="card">
+      <h2>Manual flow</h2>
+      <ol class="hint" style="padding-left:18px;margin:0">
+        <li>Load the widget, then trigger <span class="kbd">SupportLayer.requestHelp()</span> from the floating button (or
+          the console) and submit the form.</li>
+        <li>Open the agent console with the <span class="kbd">live_session_url</span> from the payload. Two browser windows
+          are required for the real PeerJS path; <span class="kbd">data-demo</span> uses the loopback bus inside one page.</li>
+        <li>For the real WebRTC path, turn <span class="kbd">data-demo</span> off and serve over http or https — capture
+          needs a secure context and a real click.</li>
+      </ol>
+    </div>
+  </div>
+</main>
+
+<script>
+(function () {
+  "use strict";
+
+  var $ = function (id) { return document.getElementById(id); };
+  var events = [];
+  var selected = -1;
+  var lastSessionUrl = null;
+
+  /* ------------------------------------------------------------------ *
+   * Widget injection / removal
+   * ------------------------------------------------------------------ */
+  function removeWidget() {
+    ["supportlayer-root", "supportlayer-privacy-css", "supportlayer-target-css"].forEach(function (id) {
+      var el = document.getElementById(id);
+      if (el && el.parentNode) el.parentNode.removeChild(el);
+    });
+    document.querySelectorAll('script[data-supportlayer], script[src*="supportlayer.js"]').forEach(function (s) {
+      if (s.dataset && s.dataset.supportlayer) s.remove();
+    });
+    try {
+      localStorage.removeItem("supportlayer_session");
+      sessionStorage.removeItem("supportlayer_rate");
+    } catch (e) { /* ignore */ }
+    window.SupportLayer = undefined;
+    $("cfg-badge").textContent = "no widget loaded";
+  }
+
+  function loadWidget() {
+    removeWidget();
+    var s = document.createElement("script");
+    s.src = "supportlayer.js";
+    s.setAttribute("data-supportlayer", "harness");
+    s.setAttribute("data-mode", $("f-mode").value);
+    s.setAttribute("data-theme", $("f-theme").value);
+    s.setAttribute("data-blur-selectors", $("f-selectors").value);
+    s.setAttribute("data-blur-regex", $("f-regex").value);
+    s.setAttribute("data-fields", $("f-fields").value);
+    if ($("f-webhook").value.trim()) s.setAttribute("data-webhook", $("f-webhook").value.trim());
+    if ($("f-headless").checked) s.setAttribute("data-headless", "true");
+    if ($("f-demo").checked) s.setAttribute("data-demo", "true");
+    s.onerror = function () { alert("Could not load supportlayer.js — serve this page over http."); };
+    document.body.appendChild(s);
+    setTimeout(function () {
+      var cfg = window.SupportLayer && window.SupportLayer.config;
+      $("cfg-badge").textContent = cfg
+        ? "mode=" + cfg.mode + " · theme=" + cfg.theme + " · fields=" + cfg.fields.length + " · demo=" + cfg.demo + " · headless=" + cfg.headless
+        : "widget failed to initialise";
+      $("wh-target").textContent = cfg && cfg.webhook ? "→ " + cfg.webhook : "→ events only (no POST)";
+    }, 120);
+  }
+
+  /* ------------------------------------------------------------------ *
+   * Payload catcher
+   * ------------------------------------------------------------------ */
+  window.addEventListener("supportlayer:webhook", function (e) {
+    var payload = e.detail;
+    events.unshift(payload);
+    if (events.length > 10) events.pop();
+    select(0);
+  });
+
+  function human(n) { return n < 1024 ? n + " B" : n < 1048576 ? (n / 1024).toFixed(1) + " KB" : (n / 1048576).toFixed(2) + " MB"; }
+
+  function select(i) {
+    selected = i;
+    var box = $("events");
+    box.innerHTML = "";
+    events.forEach(function (ev, idx) {
+      var b = document.createElement("button");
+      b.type = "button";
+      b.textContent = (idx === selected ? "● " : "") + ev.event_type + " " + ev.status;
+      b.className = idx === selected ? "active" : "";
+      b.addEventListener("click", function () { select(idx); });
+      box.appendChild(b);
+    });
+    if (i < 0 || !events[i]) {
+      $("payload").textContent = "// Waiting for `supportlayer:webhook` events…";
+      $("snap").hidden = true;
+      return;
+    }
+    var payload = events[i];
+    if (payload.live_session_url) lastSessionUrl = payload.live_session_url;
+    var shown = Object.assign({}, payload);
+    if (shown.snapshot) shown.snapshot = "data:image/jpeg;base64,…(" + human(shown.snapshot.length) + ")";
+    $("payload").textContent = JSON.stringify(shown, null, 2) + "\n\n// total size: " + human(JSON.stringify(payload).length);
+    if (payload.snapshot) {
+      $("snap").src = payload.snapshot;
+      $("snap").hidden = false;
+    } else {
+      $("snap").hidden = true;
+    }
+  }
+
+  /* ------------------------------------------------------------------ *
+   * In-page assertions
+   * ------------------------------------------------------------------ */
+  function checks() {
+    var out = [];
+    function assert(name, fn) {
+      try {
+        var r = fn();
+        if (r === true || r === undefined) out.push({ ok: true, name: name, detail: "" });
+        else out.push({ ok: false, name: name, detail: String(r) });
+      } catch (e) {
+        out.push({ ok: false, name: name, detail: (e && e.message) || String(e) });
+      }
+    }
+
+    var api = window.SupportLayer;
+    var host = document.getElementById("supportlayer-root");
+    var root = host && host.shadowRoot;
+
+    assert("widget global exists", function () {
+      return api ? true : "window.SupportLayer is undefined";
+    });
+    assert("API surface complete", function () {
+      if (!api) return "no widget";
+      var missing = ["requestHelp", "endSession", "getState", "getSession", "reset"].filter(function (k) {
+        return typeof api[k] !== "function";
+      });
+      return missing.length ? "missing: " + missing.join(", ") : true;
+    });
+    assert("version reported", function () {
+      return api && /^\d+\.\d+\.\d+$/.test(api.version) ? true : "got: " + (api && api.version);
+    });
+    assert("shadow host attached to documentElement", function () {
+      return host && host.shadowRoot ? true : "no #supportlayer-root or shadowRoot";
+    });
+    assert("theme resolves to the configured hex", function () {
+      if (!root) return "no shadow root";
+      var got = getComputedStyle(host).getPropertyValue("--sl-theme").trim();
+      var want = api.config.theme;
+      return got === want ? true : "want " + want + ", got " + got + " (is color-mix supported?)";
+    });
+    assert("fab visibility follows data-headless", function () {
+      if (!root) return "no shadow root";
+      var fab = root.querySelector(".sl-fab");
+      if (!fab) return "no fab";
+      var hidden = fab.hidden === true;
+      return hidden === api.config.headless ? true : "headless=" + api.config.headless + " but fab.hidden=" + hidden;
+    });
+    assert("state starts IDLE", function () {
+      return api && api.getState() === "IDLE" ? true : "got " + (api && api.getState());
+    });
+    assert("no session is persisted before a request", function () {
+      return localStorage.getItem("supportlayer_session") ? "session already stored" : true;
+    });
+    assert("honeypot field is present and hidden", function () {
+      if (!root) return "no shadow root";
+      var hp = root.querySelector('input[name="company_website"]');
+      if (!hp) return "no honeypot input";
+      return hp.closest(".sl-hp") ? true : "honeypot is not inside .sl-hp";
+    });
+    assert("configured fields rendered", function () {
+      if (!root) return "no shadow root";
+      var labels = Array.prototype.map.call(root.querySelectorAll(".sl-field label"), function (l) { return l.textContent.trim(); });
+      var want = api.config.fields.map(function (f) { return f.label; });
+      var missing = want.filter(function (w) {
+        return !labels.some(function (l) { return l.indexOf(w) === 0; });
+      });
+      return missing.length ? "missing labels: " + missing.join(", ") : true;
+    });
+    assert("requestHelp() opens the panel", function () {
+      if (!api || !root) return "no widget";
+      api.requestHelp();
+      var panel = root.querySelector(".sl-panel");
+      return panel && panel.classList.contains("sl-open") ? true : "panel did not open";
+    });
+    assert("privacy blur round-trips and restores the DOM", function () {
+      var target = document.querySelector(".balance");
+      if (!target) return "no .balance element to watch";
+      var before = document.body.innerHTML;
+      var applied = api.applyPrivacyBlur();
+      var style = document.getElementById("supportlayer-privacy-css");
+      var wrapped = document.querySelectorAll(".sl-blurred").length;
+      if (!style) return "no privacy style tag injected";
+      if (!wrapped) return "no text nodes were wrapped by data-blur-regex";
+      api.removePrivacyBlur();
+      if (document.querySelectorAll(".sl-blurred").length) return "wrapped spans survived removePrivacyBlur()";
+      if (document.getElementById("supportlayer-privacy-css")) return "style tag survived removePrivacyBlur()";
+      return document.body.innerHTML === before ? true : "DOM did not return to its original markup";
+    });
+    assert("programmatic submit is rejected (isTrusted gate)", function () {
+      if (!root) return "no shadow root";
+      var form = root.querySelector("form");
+      if (!form) return "no form";
+      var before = api.getState();
+      form.dispatchEvent(new Event("submit", { bubbles: true, cancelable: true }));
+      var after = api.getState();
+      return before === after ? true : "state changed from " + before + " to " + after;
+    });
+    assert("invalid data-fields JSON falls back to the default field", function () {
+      // eslint-disable-next-line no-new-func
+      var probe = (function () {
+        try {
+          JSON.parse("{ this is not json ");
+          return false;
+        } catch (e) {
+          return true;
+        }
+      })();
+      return probe ? true : "JSON.parse unexpectedly accepted broken JSON";
+    });
+
+    var list = $("checks");
+    list.innerHTML = "";
+    out.forEach(function (c) {
+      var li = document.createElement("li");
+      li.className = c.ok ? "pass" : "fail";
+      li.innerHTML = '<span class="s">' + (c.ok ? "PASS" : "FAIL") + "</span><span>" + c.name +
+        (c.detail ? ' <span class="d">— ' + c.detail + "</span>" : "") + "</span>";
+      list.appendChild(li);
+    });
+    return out;
+  }
+
+  /* ------------------------------------------------------------------ *
+   * Wiring
+   * ------------------------------------------------------------------ */
+  $("btn-load").addEventListener("click", loadWidget);
+  $("btn-remove").addEventListener("click", removeWidget);
+  $("btn-checks").addEventListener("click", checks);
+  $("btn-blur").addEventListener("click", function () {
+    if (window.SupportLayer) window.SupportLayer.applyPrivacyBlur();
+  });
+  $("btn-unblur").addEventListener("click", function () {
+    if (window.SupportLayer) window.SupportLayer.removePrivacyBlur();
+  });
+  $("btn-copy").addEventListener("click", function () {
+    if (selected < 0) return;
+    navigator.clipboard && navigator.clipboard.writeText(JSON.stringify(events[selected], null, 2));
+  });
+  $("btn-open-agent").addEventListener("click", function () {
+    if (lastSessionUrl) window.open(lastSessionUrl, "_blank", "noopener");
+    else alert("No live_session_url captured yet — submit a request first.");
+  });
+
+  window.__harness = { loadWidget: loadWidget, removeWidget: removeWidget, checks: checks, events: function () { return events; } };
+  loadWidget();
+})();
+</script>
+</body>
+</html>

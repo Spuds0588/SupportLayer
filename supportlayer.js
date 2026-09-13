@@ -71,11 +71,40 @@
     return new Date().toISOString();
   }
 
-  function splitAttr(v) {
-    return String(v || "")
-      .split(",")
-      .map(function (s) {
-        return s.trim();
+  /**
+   * Split a comma-separated attribute into entries without tearing apart the entries
+   * themselves: quantifiers (`{2,}`), selector functions (`:is(a, b)`) and attribute
+   * selectors (`[data-x]`) all legally contain commas. A JSON array is accepted too.
+   */
+  function splitPatterns(raw) {
+    var s = String(raw == null ? "" : raw).trim();
+    if (!s) return [];
+    if (s.charAt(0) === "[") {
+      try {
+        var parsed = JSON.parse(s);
+        if (Array.isArray(parsed)) return parsed.map(String).filter(function (x) { return x.trim(); });
+      } catch (e) {
+        /* not JSON — fall through to the brace-aware splitter */
+      }
+    }
+    var out = [];
+    var current = "";
+    var depth = 0;
+    for (var i = 0; i < s.length; i++) {
+      var ch = s.charAt(i);
+      if (ch === "{" || ch === "(" || ch === "[") depth++;
+      else if (ch === "}" || ch === ")" || ch === "]") depth = Math.max(0, depth - 1);
+      if (ch === "," && depth === 0) {
+        out.push(current);
+        current = "";
+      } else {
+        current += ch;
+      }
+    }
+    out.push(current);
+    return out
+      .map(function (t) {
+        return t.trim();
       })
       .filter(Boolean);
   }
@@ -146,8 +175,8 @@
     })(),
     theme: normalizeHex(dataAttr("theme") || DEFAULT_THEME),
     headless: String(dataAttr("headless") || "false") === "true",
-    blurSelectors: splitAttr(dataAttr("blur-selectors")),
-    blurRegex: splitAttr(dataAttr("blur-regex")),
+    blurSelectors: splitPatterns(dataAttr("blur-selectors")),
+    blurRegex: splitPatterns(dataAttr("blur-regex")),
     fields: parseFields(dataAttr("fields")),
     demo: String(dataAttr("demo") || "false") === "true" || /[?&]sl-demo=1/.test(location.search),
     peerCdn: dataAttr("peer-cdn") || DEFAULT_PEER_CDN,
@@ -642,6 +671,8 @@
 
   var CSS = [
     "* { box-sizing: border-box; }",
+    // The `hidden` attribute must win over any display we set ourselves.
+    "[hidden] { display: none !important; }",
     ":host, .sl-root { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Inter, Roboto, sans-serif; }",
     "button { font: inherit; cursor: pointer; }",
     ".sl-fab {",
@@ -711,8 +742,10 @@
     ".sl-pill { display: inline-block; padding: 3px 8px; border-radius: 999px; font-size: 10px; font-weight: 700; letter-spacing: .04em; text-transform: uppercase; background: var(--sl-theme-dim); color: var(--sl-theme-fg); border: 1px solid var(--sl-theme-border); }",
     /* overlay layers (laser + drawing) */
     ".sl-overlay { position: fixed; inset: 0; pointer-events: none; z-index: 1; }",
-    "canvas.sl-draw { position: fixed; inset: 0; width: 100%; height: 100%; pointer-events: none; z-index: 4; }",
-    "canvas.sl-draw.sl-blocking { pointer-events: auto; cursor: default; }",
+    /* The overlay canvas stays out of the layout (and out of a11y trees) until an
+       agent actually draws, so an idle page shows no agent chrome at all. */
+    "canvas.sl-draw { display: none; position: fixed; inset: 0; width: 100%; height: 100%; pointer-events: none; z-index: 4; }",
+    "canvas.sl-draw.sl-blocking { display: block; pointer-events: auto; cursor: default; }",
     ".sl-laser { position: fixed; width: 26px; height: 26px; margin: -13px 0 0 -13px; pointer-events: none; z-index: 6; }",
     ".sl-laser i { position: absolute; inset: 0; border-radius: 50%; background: radial-gradient(circle at 50% 50%, #fff 0 14%, var(--sl-theme) 16% 40%, rgba(20,184,166,0) 62%); animation: sl-laser 1.1s ease-out forwards; }",
     ".sl-laser b { position: absolute; inset: -6px; border-radius: 50%; border: 2px solid var(--sl-theme); animation: sl-ring 1.1s ease-out forwards; }",
@@ -1184,22 +1217,29 @@
   /** Loopback bus: same wire protocol as PeerJS, no network. Demo/testing only. */
   function LoopbackTransport() {
     var ch;
+    var closed = false;
+    var peerId = session ? session.peerId : null;
     try {
       ch = new BroadcastChannel("supportlayer-bus");
     } catch (e) {
       ch = null;
     }
+
+    function post(obj) {
+      if (closed || !ch) return;
+      ch.postMessage({ dir: "client→agent", to: peerId, data: obj });
+    }
+
     var self = {
       name: "loopback",
-      peerId: session.peerId,
-      send: function (obj) {
-        if (!ch) return;
-        ch.postMessage({ dir: "client→agent", to: session.peerId, data: obj });
-      },
+      peerId: peerId,
+      send: post,
       announce: function () {},
       close: function () {
+        if (closed) return;
+        post({ t: "bye" });
+        closed = true;
         try {
-          if (ch) ch.postMessage({ dir: "client→agent", to: session.peerId, data: { t: "bye" } });
           if (ch) ch.close();
         } catch (e) {
           /* ignore */
@@ -1212,21 +1252,22 @@
     }
     ch.onmessage = function (ev) {
       var msg = ev.data || {};
-      if (msg.dir !== "agent→client") return;
-      if (msg.to && msg.to !== session.peerId) return;
+      if (closed || msg.dir !== "agent→client") return;
+      if (msg.to && msg.to !== peerId) return;
       var data = msg.data || {};
       if (data.t === "hello") {
-        if (data.agentPeerId) session.agentPeerId = data.agentPeerId;
+        if (data.agentPeerId && session) session.agentPeerId = data.agentPeerId;
         if (state !== STATES.CONNECTED) onTransportConnected("loopback");
       }
       handleWire(data);
     };
     // Periodic announce so an agent pane that loads later still finds us.
+    // Stops on connect, on close, and after ~4 minutes of trying.
     var tries = 0;
     self.announce = function () {
-      if (tries++ > 200 || state === STATES.CONNECTED) return;
-      if (ch) ch.postMessage({ dir: "client→agent", to: session.peerId, data: { t: "announce", mode: CFG.mode } });
-      if (state !== STATES.CONNECTED) setTimeout(self.announce, 1200);
+      if (closed || state === STATES.CONNECTED || tries++ > 200) return;
+      post({ t: "announce", mode: CFG.mode });
+      if (!closed && state !== STATES.CONNECTED) setTimeout(self.announce, 1200);
     };
     self.announce();
     return self;
@@ -1702,7 +1743,11 @@
     clearTimeout(drawIdleTimer);
     strokes = [];
     if (ui.ctx) redrawStrokes();
-    if (ui.canvas) ui.canvas.classList.remove("sl-blocking");
+    if (ui.canvas) {
+      ui.canvas.classList.remove("sl-blocking");
+      ui.canvas.width = 0;
+      ui.canvas.height = 0;
+    }
     if (ui.drawHint) ui.drawHint.hidden = true;
   }
 

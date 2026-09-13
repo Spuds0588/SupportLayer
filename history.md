@@ -41,3 +41,43 @@ landing page with a *real*, interactive demo rather than screenshots.
 as a GitHub Pages entry point; it must be replaced by lowercase `index.html`.
 
 ---
+
+## 2026-09-13 — Session 2: v1 built, verified, shipped to `main`
+
+**Landed.** `supportlayer.js` (config, Shadow-DOM widget, privacy blur, snapshot capture,
+webhook + anti-spam, PeerJS transport, agent commands), `agent.html` (video stage with
+letterbox-aware coordinate mapping, laser/type/draw tools), `demo-app.html`, `index.html`
+(hero, install snippet, feature grid, full simulated demo, LiveLayer Embeds, docs),
+`test.html`, `serve.js`, `package.json`, `favicon.svg`, `.gitignore`, `README.md`.
+
+**Verification.** `tests/e2e.mjs` (Puppeteer, `puppeteer-core` + system Chromium) grows to
+84 checks: config parsing, request flow, redaction round-trip, ±12px coordinate accuracy,
+draw auto-clear, directed typing, reload/resume, teardown, harness assertions, console
+hygiene, and desktop/mobile layout. Green headless **and** headed.
+
+**Bugs found and fixed this session.**
+
+1. `splitPatterns()` — `data-blur-regex="{2,}"` was being torn apart by a naive
+   `String.split(",")`, silently disabling redaction. The splitter now respects `{}`, `()`
+   and `[]`, and also accepts a JSON array.
+2. Puppeteer reports `console.warn` as `"warn"`, not `"warning"` — the harness's console
+   filter was mislabelling the invalid-`data-fields` warning as an error.
+3. Loopback `announce` timer fired after teardown and threw on a nulled session (headed-only
+   failure). It now stops on connect, on `close()`, and after 200 tries, capturing `peerId`
+   locally instead of reading `session`.
+4. `.sl-draw-hint` set `display: inline-flex`, which beat the `hidden` attribute, so
+   "The agent is drawing" was permanently visible and swallowed clicks. Fixed with an
+   explicit `[hidden] { display: none !important; }` in the shadow stylesheet.
+5. The overlay canvas itself was always in the layout (transparent but hit-testable and
+   reported by the idle-page assertion). It is now `display: none` until a stroke arrives
+   and is sized back to zero on `clearDrawing()`.
+6. The "Copy" button overlapped the hero install snippet; the Copy control moved into the
+   snippet's own bar.
+7. MailLayer's jsDelivr path 404s — its canonical CDN is `embedded.maillayer.wiki`, so the
+   embed tries that first and falls back.
+8. `PORT=0` is exported by this shell; `serve.js` and the test runner now treat `0` as unset
+   instead of binding a random port the tests can't find.
+
+**Environment facts.** `DISPLAY=:1` is available, so `--headed` runs are real. `gh` is
+authenticated as the repo owner. `Puppeteer` is pinned at 24.10.0 with
+`PUPPETEER_EXECUTABLE_PATH` unset because the suite auto-detects `google-chrome`.

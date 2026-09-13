@@ -1,0 +1,229 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Sunny Bakery — Checkout</title>
+<link rel="icon" type="image/svg+xml" href="favicon.svg">
+<style>
+  :root {
+    --ink: #12151c;
+    --muted: #6b7385;
+    --line: #e6e8ee;
+    --brand: #f4a52a;
+    --bg: #f7f8fb;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; background: var(--bg); color: var(--ink);
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Inter, Roboto, sans-serif;
+    font-size: 14px; line-height: 1.5;
+  }
+  a { color: #0f766e; }
+  .nav {
+    display: flex; align-items: center; gap: 16px; padding: 14px 22px; background: #fff;
+    border-bottom: 1px solid var(--line); position: sticky; top: 0; z-index: 5;
+  }
+  .brand { display: flex; align-items: center; gap: 9px; font-weight: 800; letter-spacing: -.01em; font-size: 15px; }
+  .brand i { width: 22px; height: 22px; border-radius: 7px; background: var(--brand); display: inline-block; }
+  .nav nav { display: flex; gap: 16px; margin-left: auto; color: var(--muted); }
+  .nav nav a { color: var(--muted); text-decoration: none; font-weight: 600; }
+  .cart-chip { background: #12151c; color: #fff; border-radius: 999px; padding: 5px 11px; font-size: 12px; font-weight: 700; }
+  main { max-width: 1040px; margin: 0 auto; padding: 22px; display: grid; grid-template-columns: minmax(0, 1fr) 320px; gap: 22px; }
+  @media (max-width: 860px) { main { grid-template-columns: minmax(0, 1fr); } }
+  h1 { font-size: 20px; margin: 0 0 4px; letter-spacing: -.01em; }
+  .sub { color: var(--muted); margin: 0 0 18px; font-size: 13px; }
+  .card { background: #fff; border: 1px solid var(--line); border-radius: 14px; padding: 16px; }
+  .card + .card { margin-top: 14px; }
+  .item { display: flex; gap: 12px; align-items: center; padding: 11px 0; border-bottom: 1px dashed var(--line); }
+  .item:last-child { border-bottom: 0; }
+  .thumb { width: 48px; height: 48px; border-radius: 10px; background: linear-gradient(135deg, #ffe1a8, #f4a52a); flex: none; }
+  .item .name { font-weight: 650; }
+  .item .meta { color: var(--muted); font-size: 12px; }
+  .item .price { margin-left: auto; font-weight: 700; }
+  .row { display: flex; justify-content: space-between; padding: 7px 0; font-size: 13px; }
+  .row.total { border-top: 1px solid var(--line); margin-top: 8px; padding-top: 11px; font-weight: 800; font-size: 15px; }
+  .sensitive-data { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 12.5px; }
+  .field { margin-bottom: 11px; }
+  .field label { display: block; font-size: 11.5px; font-weight: 700; color: var(--muted); margin-bottom: 4px; text-transform: uppercase; letter-spacing: .04em; }
+  .field input { width: 100%; padding: 9px 11px; border: 1px solid var(--line); border-radius: 9px; font: inherit; font-size: 13px; }
+  .pay {
+    width: 100%; padding: 12px; border: 0; border-radius: 11px; background: #14b8a6; color: #05100e;
+    font: inherit; font-weight: 800; font-size: 14px; cursor: pointer;
+  }
+  .pay:hover { filter: brightness(1.06); }
+  .pay.busy { background: #cbd5e1; color: #475569; cursor: progress; }
+  .error {
+    display: none; margin: 12px 0 0; padding: 11px 12px; border-radius: 10px; font-size: 12.5px;
+    background: #fef2f2; border: 1px solid #fecaca; color: #b91c1c;
+  }
+  .error.show { display: block; }
+  .help-note { font-size: 12px; color: var(--muted); margin-top: 12px; }
+  .help-note button {
+    background: none; border: 0; padding: 0; font: inherit; font-weight: 700; color: #0f766e;
+    cursor: pointer; text-decoration: underline;
+  }
+  footer { padding: 18px 22px 26px; color: var(--muted); font-size: 12px; max-width: 1040px; margin: 0 auto; }
+  .demo-tag {
+    display: inline-block; margin-bottom: 14px; padding: 4px 10px; border-radius: 999px;
+    background: #ecfeff; border: 1px solid #a5f3fc; color: #0e7490; font-size: 11px; font-weight: 800;
+    text-transform: uppercase; letter-spacing: .06em;
+  }
+</style>
+</head>
+<body>
+<div class="nav">
+  <span class="brand"><i></i> Sunny Bakery</span>
+  <nav>
+    <a href="#">Shop</a>
+    <a href="#">Subscriptions</a>
+    <a href="#">Help</a>
+    <span class="cart-chip">Cart · 3</span>
+  </nav>
+</div>
+
+<main>
+  <section>
+    <span class="demo-tag">Simulated customer app</span>
+    <h1>Checkout</h1>
+    <p class="sub">This page loads the real <code>supportlayer.js</code>. Only the screen capture and the peer transport are simulated.</p>
+
+    <div class="card">
+      <div class="item">
+        <span class="thumb"></span>
+        <span>
+          <span class="name">Sourdough starter kit</span>
+          <div class="meta">Ships Tuesday · qty 1</div>
+        </span>
+        <span class="price">$32.00</span>
+      </div>
+      <div class="item">
+        <span class="thumb"></span>
+        <span>
+          <span class="name">Rye flour, stone ground</span>
+          <div class="meta">2 kg · qty 2</div>
+        </span>
+        <span class="price">$9.60</span>
+      </div>
+      <div class="item">
+        <span class="thumb"></span>
+        <span>
+          <span class="name">Bench scraper</span>
+          <div class="meta">Stainless · qty 1</div>
+        </span>
+        <span class="price">$6.60</span>
+      </div>
+    </div>
+
+    <div class="card">
+      <h2 style="font-size:14px;margin:0 0 12px">Payment</h2>
+      <div class="field">
+        <label for="card">Card on file</label>
+        <input id="card" class="sensitive-data" value="4242 4242 4242 4242" readonly>
+      </div>
+      <div class="field">
+        <label for="email">Receipt email</label>
+        <input id="email" class="sensitive-data" value="jane.doe@example.com" readonly>
+      </div>
+      <div class="field">
+        <label for="ssn">Tax ID on file</label>
+        <input id="ssn" class="sensitive-data" value="123-45-6789" readonly>
+      </div>
+      <button class="pay" id="pay" type="button">Complete purchase</button>
+      <div class="error" id="error">
+        <strong>Payment gateway timeout (504).</strong> Your card was not charged. Nothing you did was wrong — this
+        failure only happens on the checkout screen.
+      </div>
+      <p class="help-note">
+        Card charged twice? Use <button id="helpLink" type="button">Get support</button> and we'll look at it with you live.
+      </p>
+    </div>
+  </section>
+
+  <aside>
+    <div class="card">
+      <h2 style="font-size:14px;margin:0 0 10px">Order summary</h2>
+      <div class="row"><span>Subtotal</span><span>$48.20</span></div>
+      <div class="row"><span>Shipping</span><span>Free</span></div>
+      <div class="row"><span>Tax</span><span>$3.86</span></div>
+      <div class="row total"><span class="amount-due">Total due</span><span class="order-total">$52.06</span></div>
+    </div>
+    <div class="card">
+      <h2 style="font-size:14px;margin:0 0 8px">Account</h2>
+      <div class="row"><span>Signed in as</span><span class="sensitive-data">jane.doe@example.com</span></div>
+      <div class="row"><span>Plan</span><span>Weekly subscription</span></div>
+      <div class="row"><span>Reputation</span><span>Trusted customer</span></div>
+    </div>
+  </aside>
+</main>
+
+<footer>
+  Simulated app for the SupportLayer demo · the failure above is intentional so there is something to report.
+</footer>
+
+<!-- The product under test. data-demo="true" swaps screen capture for a synthetic frame and
+     PeerJS for a same-origin loopback bus, so the flow works with no backend and no permissions. -->
+<script
+  src="supportlayer.js"
+  data-demo="true"
+  data-mode="chat"
+  data-theme="#14b8a6"
+  data-webhook="https://hooks.example.com/supportlayer/demo"
+  data-blur-selectors=".sensitive-data, .amount-due, .order-total"
+  data-blur-regex="\d{3}-\d{2}-\d{4}|[\w.+-]+@[\w-]+\.[a-z]{2,}"
+  data-fields='[
+    {"name":"name","type":"text","label":"Your name","required":true,"placeholder":"Jane Doe"},
+    {"name":"issue","type":"textarea","label":"What went wrong?","required":true,"placeholder":"The Complete purchase button spins forever on checkout."},
+    {"name":"severity","type":"select","label":"How urgent is this?","options":["Blocking my checkout","Annoying but workable","Just a question"]}
+  ]'
+></script>
+
+<script>
+  "use strict";
+
+  var pay = document.getElementById("pay");
+  var error = document.getElementById("error");
+
+  pay.addEventListener("click", function () {
+    pay.classList.add("busy");
+    pay.textContent = "Contacting gateway…";
+    setTimeout(function () {
+      pay.classList.remove("busy");
+      pay.textContent = "Complete purchase";
+      error.classList.add("show");
+    }, 900);
+  });
+
+  document.getElementById("helpLink").addEventListener("click", function () {
+    if (window.SupportLayer) window.SupportLayer.requestHelp();
+  });
+
+  /**
+   * Bridge the widget's public events up to the landing page so its webhook
+   * inspector can display exactly what would have been POSTed.
+   */
+  function toParent(message) {
+    try {
+      if (window.parent && window.parent !== window) window.parent.postMessage(message, "*");
+    } catch (e) {
+      /* opened standalone — nothing to bridge to */
+    }
+  }
+
+  window.addEventListener("supportlayer:webhook", function (e) {
+    toParent({ type: "sl-webhook", payload: e.detail });
+  });
+  window.addEventListener("supportlayer:state", function (e) {
+    toParent({ type: "sl-state", state: e.detail.state, sessionId: e.detail.session_id || null });
+  });
+
+  window.__demoApp = {
+    pay: function () { pay.click(); },
+    support: function () { window.SupportLayer && window.SupportLayer.requestHelp(); },
+    end: function () { window.SupportLayer && window.SupportLayer.endSession(); }
+  };
+
+  toParent({ type: "sl-ready" });
+</script>
+</body>
+</html>

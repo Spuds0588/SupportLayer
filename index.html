@@ -1,0 +1,878 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>SupportLayer — See exactly what your users see, in one script tag</title>
+<meta name="description" content="Zero-backend, drop-in diagnostic and live P2P support widget. One-frame snapshot redacted locally before capture, straight to your webhook, plus live screen sessions where an agent can point, draw, and hand over text.">
+<meta name="robots" content="index, follow">
+<link rel="canonical" href="https://spuds0588.github.io/SupportLayer/">
+<link rel="icon" type="image/svg+xml" href="favicon.svg">
+<meta property="og:title" content="SupportLayer — See exactly what your users see, in one script tag">
+<meta property="og:description" content="Drop-in diagnostics + live P2P support. No backend, no S3, no SDK. Snapshot, redact, and connect.">
+<meta property="og:type" content="website">
+<meta property="og:url" content="https://spuds0588.github.io/SupportLayer/">
+<meta name="twitter:card" content="summary_large_image">
+<meta name="twitter:title" content="SupportLayer — See exactly what your users see, in one script tag">
+<meta name="twitter:description" content="Drop-in diagnostics + live P2P support. No backend, no S3, no SDK.">
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bulma@1.0.0/css/bulma.min.css">
+<script defer src="https://use.fontawesome.com/releases/v5.15.4/js/all.js"></script>
+<style>
+  :root {
+    /* SupportLayer keeps the family dark palette with its own teal accent */
+    --primary: #14b8a6;
+    --primary-dark: #0d9488;
+    --primary-dim: rgba(20, 184, 166, .12);
+    --primary-border: rgba(20, 184, 166, .45);
+    --black: #0a0a0a;
+    --pure-black: #000000;
+    --dark-grey: #101318;
+    --white: #ffffff;
+    --text-main: #f3f4f6;
+    --text-dim: #9ca3af;
+    --warn: #febc2e;
+  }
+
+  html { scroll-behavior: smooth; background-color: var(--pure-black); }
+  html, body { overflow-x: clip; }
+  body {
+    background-color: transparent;
+    color: var(--text-main);
+    font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+    margin: 0; line-height: 1.6; position: relative;
+  }
+  code { background: rgba(255,255,255,.06); color: #9fe9dc; padding: 1px 6px; border-radius: 6px; font-size: .9em; }
+
+  /* ---------- background: floating lifebuoys ---------- */
+  #bg-canvas {
+    position: fixed; inset: 0; z-index: -1; overflow: hidden; pointer-events: none;
+    background: radial-gradient(ellipse at center, transparent 0%, transparent 45%, rgba(6,10,12,.9) 100%);
+  }
+  .bg-gradient-overlay {
+    position: absolute; inset: 0;
+    background: radial-gradient(ellipse at 50% 0%, rgba(20,184,166,.16) 0%, transparent 55%),
+                radial-gradient(ellipse at 100% 100%, rgba(13,148,136,.10) 0%, transparent 55%);
+  }
+  .bg-wrap { position: absolute; inset: 0; overflow: hidden; perspective: 1000px; }
+  .floating-svg { position: absolute; bottom: -200px; transform-style: preserve-3d; fill: none; stroke: var(--primary); stroke-width: 1.6; opacity: .3; }
+  @keyframes float-up {
+    from { bottom: -200px; transform: translateX(0) rotate(0deg); }
+    to { bottom: 120vh; transform: translateX(var(--drift)) rotate(var(--rotation)); }
+  }
+
+  /* ---------- layout ---------- */
+  .section { padding: 7rem 2rem; }
+  .container { max-width: 1140px !important; }
+  .hero { min-height: min(78vh, 760px); padding: 0 2rem; display: flex; align-items: center; }
+  .hero .title { color: var(--white); font-weight: 900; font-size: 3.4rem; letter-spacing: -.045em; line-height: 1.03; }
+  .hero .subtitle { color: var(--text-dim); font-size: 1.16rem; max-width: 830px; margin: .9rem auto 1.6rem !important; }
+  .hero + .section { padding-top: 5rem; }
+  .has-text-sl { color: var(--primary) !important; }
+  .eyebrow { display: inline-block; margin-bottom: 1.25rem; padding: .35rem 1rem; border-radius: 999px; background: var(--primary-dim); border: 1px solid var(--primary-border); color: #9fe9dc; font-size: .78rem; font-weight: 700; letter-spacing: .05em; text-transform: uppercase; }
+
+  .section-title { color: #fff; font-weight: 800; letter-spacing: -.02em; }
+  .section-sub { color: var(--text-dim); max-width: 760px; margin: .6rem auto 0; }
+
+  /* ---------- code box ---------- */
+  .code-box {
+    position: relative; max-width: 840px; margin: 0 auto; padding: 1.35rem 5.5rem 1.35rem 1.5rem;
+    background: rgba(16,19,24,.78); border: 1px solid rgba(255,255,255,.1); border-radius: 16px;
+    font-family: 'Fira Code', 'Courier New', monospace; font-size: .95rem; color: #9fe9dc;
+    box-shadow: 0 20px 40px rgba(0,0,0,.45); overflow-wrap: anywhere;
+  }
+  .code-box::before {
+    content: "supportlayer.js"; position: absolute; top: -12px; left: 20px; padding: 2px 10px;
+    background: var(--primary); color: #05100e; font-family: 'Inter', sans-serif; font-size: .72rem;
+    font-weight: 800; border-radius: 5px;
+  }
+  .code-box code { background: transparent; padding: 0; color: inherit; font: inherit; }
+  .copy-btn {
+    position: absolute; right: 14px; top: 14px; padding: 5px 11px; border-radius: 7px; cursor: pointer;
+    background: transparent; border: 1px solid rgba(255,255,255,.2); color: var(--text-dim);
+    font-family: 'Inter', sans-serif; font-size: .8rem;
+  }
+  .copy-btn:hover { background: rgba(255,255,255,.1); color: #fff; }
+
+  /* ---------- hero flow ---------- */
+  .sl-flow { display: flex; align-items: center; justify-content: center; flex-wrap: wrap; gap: .7rem; margin: 3rem auto 0; max-width: 960px; }
+  .sl-flow-step {
+    display: inline-flex; align-items: center; gap: .5rem; padding: .6rem 1rem; border-radius: 999px;
+    border: 1px solid rgba(255,255,255,.14); background: rgba(255,255,255,.04); color: var(--text-dim);
+    font-size: .9rem; font-weight: 600; animation: sl-glow 6s ease-in-out infinite;
+  }
+  .sl-flow-step i { color: var(--primary); font-size: .85rem; }
+  .sl-flow-arrow { color: rgba(255,255,255,.25); font-size: .75rem; animation: sl-arrow 6s ease-in-out infinite; }
+  .st-2 { animation-delay: 1.2s; } .st-3 { animation-delay: 2.4s; } .st-4 { animation-delay: 3.6s; } .st-5 { animation-delay: 4.8s; }
+  .a-1 { animation-delay: .6s; } .a-2 { animation-delay: 1.8s; } .a-3 { animation-delay: 3s; } .a-4 { animation-delay: 4.2s; }
+  @keyframes sl-glow {
+    0%, 15%, 100% { border-color: rgba(255,255,255,.14); background: rgba(255,255,255,.04); color: var(--text-dim); box-shadow: none; }
+    5%, 10% { border-color: var(--primary-border); background: var(--primary-dim); color: #fff; box-shadow: 0 0 20px rgba(20,184,166,.28); }
+  }
+  @keyframes sl-arrow { 0%, 14%, 100% { color: rgba(255,255,255,.25); } 6%, 10% { color: var(--primary); } }
+  @media (prefers-reduced-motion: reduce) { .sl-flow-step, .sl-flow-arrow { animation: none; } }
+
+  /* ---------- boxes ---------- */
+  .box.is-standard, .box.is-demo {
+    background: rgba(255,255,255,.03); border: 1px solid rgba(255,255,255,.09); border-radius: 22px;
+    backdrop-filter: blur(16px); box-shadow: 0 25px 50px -12px rgba(0,0,0,.5);
+    transition: transform .28s ease, border-color .28s ease;
+  }
+  .box.is-standard { padding: 2.4rem; height: 100%; }
+  .box.is-standard:hover, .box.is-demo:hover { transform: translateY(-6px); border-color: var(--primary-border); }
+  .feature-icon { font-size: 2.1rem; margin-bottom: 1.1rem; color: var(--primary); }
+  .box h3 { color: #fff; }
+  .box p { color: #cbd2dd; }
+
+  .btn-sl {
+    display: inline-flex; align-items: center; gap: .5rem; padding: .95rem 1.6rem; border-radius: 999px;
+    background: var(--primary); color: #05100e; font-weight: 800; border: 0; cursor: pointer; font-size: .95rem;
+  }
+  .btn-sl:hover { background: #2dd4bf; color: #05100e; }
+  .btn-sl-ghost { background: rgba(255,255,255,.06); color: var(--text-main); border: 1px solid rgba(255,255,255,.14); }
+  .btn-sl-ghost:hover { background: rgba(255,255,255,.13); color: #fff; }
+  .btn-sl[disabled] { opacity: .5; cursor: not-allowed; }
+
+  /* ---------- demo ---------- */
+  #demo { background: rgba(255,255,255,.012); border-top: 1px solid rgba(255,255,255,.06); border-bottom: 1px solid rgba(255,255,255,.06); }
+  .frame {
+    border: 1px solid rgba(255,255,255,.1); border-radius: 16px; overflow: hidden; background: #0b0e13;
+    box-shadow: 0 30px 60px -20px rgba(0,0,0,.65);
+  }
+  .frame-bar { display: flex; align-items: center; gap: 10px; padding: 9px 12px; background: #13171e; border-bottom: 1px solid rgba(255,255,255,.07); }
+  .frame-bar .dots { display: flex; gap: 6px; }
+  .frame-bar .dots i { width: 10px; height: 10px; border-radius: 50%; display: inline-block; }
+  .frame-bar .url { flex: 1; font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 11.5px; color: #8b93a7; background: #1b202a; border-radius: 7px; padding: 4px 10px; overflow: hidden; white-space: nowrap; }
+  .frame-bar .tag { font-size: 10px; font-weight: 800; letter-spacing: .07em; text-transform: uppercase; color: var(--text-dim); }
+  iframe.customer { display: block; width: 100%; height: 700px; border: 0; background: #f7f8fb; }
+  iframe.agent { display: block; width: 100%; height: 700px; border: 0; background: #0a0c10; }
+  @media (max-width: 768px) { iframe.customer { height: 540px; } iframe.agent { height: 560px; } }
+
+  .demo-controls { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; margin: 18px 0 8px; }
+  .chip {
+    display: inline-flex; align-items: center; gap: 7px; padding: 6px 12px; border-radius: 999px;
+    border: 1px solid rgba(255,255,255,.12); background: rgba(255,255,255,.04); font-size: .78rem;
+    font-weight: 700; color: var(--text-dim); font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  }
+  .chip b { color: #9fe9dc; font-weight: 800; }
+  .chip.live { border-color: var(--primary-border); background: var(--primary-dim); color: #9fe9dc; }
+
+  .steps { display: grid; gap: 10px; margin: 22px 0 0; padding: 0; list-style: none; counter-reset: s; }
+  .steps li { position: relative; padding: 12px 14px 12px 46px; border-radius: 12px; background: rgba(255,255,255,.03); border: 1px solid rgba(255,255,255,.08); font-size: .9rem; color: #cbd2dd; }
+  .steps li::before {
+    counter-increment: s; content: counter(s); position: absolute; left: 12px; top: 50%; transform: translateY(-50%);
+    width: 22px; height: 22px; border-radius: 50%; background: var(--primary-dim); border: 1px solid var(--primary-border);
+    color: #9fe9dc; font-size: .72rem; font-weight: 800; display: flex; align-items: center; justify-content: center;
+  }
+
+  .inspector { display: flex; flex-direction: column; height: 640px; }
+  .inspector-head { display: flex; align-items: center; gap: 10px; padding: 12px 14px; border-bottom: 1px solid rgba(255,255,255,.08); flex-wrap: wrap; }
+  .inspector-head h3 { margin: 0; font-size: .82rem; text-transform: uppercase; letter-spacing: .08em; color: var(--text-dim); font-weight: 800; }
+  .events { display: flex; gap: 6px; flex-wrap: wrap; padding: 10px 14px 0; }
+  .events button {
+    border: 1px solid rgba(255,255,255,.12); background: rgba(255,255,255,.04); color: var(--text-dim);
+    border-radius: 999px; padding: 3px 10px; font-size: 11px; font-weight: 700; cursor: pointer;
+    font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  }
+  .events button.active { border-color: var(--primary-border); background: var(--primary-dim); color: #9fe9dc; }
+  .payload {
+    flex: 1; margin: 12px 14px; overflow: auto; background: #07090d; border: 1px solid rgba(255,255,255,.08);
+    border-radius: 12px; padding: 12px; font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+    font-size: 11.5px; line-height: 1.55; color: #cbd5e1; white-space: pre; tab-size: 2;
+  }
+  .snapshot-row { display: flex; align-items: center; gap: 12px; padding: 0 14px 14px; }
+  .snapshot-row img { width: 132px; border-radius: 8px; border: 1px solid rgba(255,255,255,.12); display: none; }
+  .snapshot-row img.show { display: block; }
+  .snapshot-row .meta { font-size: 11.5px; color: var(--text-dim); font-family: ui-monospace, SFMono-Regular, Menlo, monospace; }
+
+  .tbl { width: 100%; border-collapse: collapse; font-size: .88rem; }
+  .tbl th, .tbl td { text-align: left; padding: 10px 12px; border-bottom: 1px solid rgba(255,255,255,.08); vertical-align: top; }
+  .tbl th { color: var(--text-dim); font-size: .72rem; text-transform: uppercase; letter-spacing: .07em; }
+  .tbl code { font-size: .84rem; }
+  .pre {
+    background: #07090d; border: 1px solid rgba(255,255,255,.08); border-radius: 14px; padding: 16px;
+    overflow: auto; font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 11.6px;
+    color: #cbd5e1; line-height: 1.6;
+  }
+  .pre code { background: transparent; color: inherit; padding: 0; font: inherit; }
+  .pre .c { color: #64748b; }
+  .pre .p { color: #9fe9dc; }
+
+  .sister { display: flex; flex-direction: column; gap: 14px; padding: 2rem; height: 100%; }
+  .sister .dot { width: 12px; height: 12px; border-radius: 4px; display: inline-block; }
+  .sister h3 { margin: 0; color: #fff; font-size: 1.15rem; display: flex; align-items: center; gap: 10px; }
+  .sister p { color: #cbd2dd; margin: 0; font-size: .92rem; }
+  .sister .line { position: relative; background: #07090d; border: 1px solid rgba(255,255,255,.08); border-radius: 10px; padding: 10px 44px 10px 12px; font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 11px; color: #9fe9dc; overflow-wrap: anywhere; }
+  .sister .line button { position: absolute; right: 6px; top: 6px; }
+  .sister .actions { display: flex; gap: 8px; flex-wrap: wrap; }
+  .mini-btn {
+    display: inline-flex; align-items: center; gap: .4rem; padding: .5rem 1rem; border-radius: 999px;
+    background: rgba(255,255,255,.06); border: 1px solid rgba(255,255,255,.14); color: var(--text-main);
+    font-size: .82rem; font-weight: 700; cursor: pointer; text-decoration: none;
+  }
+  .mini-btn:hover { border-color: var(--primary-border); color: #fff; }
+
+  footer { background-color: var(--black) !important; padding: 5rem 0; border-top: 1px solid rgba(255,255,255,.06); color: var(--text-dim); }
+  footer a { color: var(--text-dim); }
+  footer a:hover { color: #fff; }
+  .nav-links { position: absolute; top: 2.2rem; right: 2.2rem; z-index: 100; display: flex; gap: 1.2rem; align-items: center; }
+  .nav-links a { color: var(--text-dim); font-size: .85rem; font-weight: 600; text-decoration: none; }
+  .nav-links a:hover { color: #fff; }
+  @media (max-width: 768px) {
+    .hero .title { font-size: 2.1rem; }
+    .hero { min-height: auto; padding: 6rem 1rem 0; }
+    .section { padding: 3.6rem 1rem; }
+    .nav-links { position: static; justify-content: center; padding-top: 1.4rem; flex-wrap: wrap; }
+  }
+</style>
+</head>
+<body>
+
+<div id="bg-canvas" aria-hidden="true">
+  <div class="bg-gradient-overlay"></div>
+  <div class="bg-wrap" id="floating-container"></div>
+</div>
+
+<div class="nav-links">
+  <a href="#demo">Demo</a>
+  <a href="#sisters">Layer family</a>
+  <a href="#docs">Docs</a>
+  <a href="agent.html" target="_blank" rel="noopener">Agent console</a>
+  <a href="https://github.com/Spuds0588/SupportLayer" target="_blank" rel="noopener"><i class="fab fa-github"></i> GitHub</a>
+</div>
+
+<section class="hero">
+  <div class="hero-body">
+    <div class="container has-text-centered">
+      <span class="eyebrow">Open source — drop-in diagnostics + live support</span>
+      <h1 class="title">
+        See exactly what your users see.<br><span class="has-text-sl">One script tag, no backend.</span>
+      </h1>
+      <h2 class="subtitle">
+        SupportLayer captures a one-frame snapshot, redacts the sensitive parts <em>before</em> capture, and POSTs the
+        report straight to your webhook. When a report isn't enough, the agent opens a live P2P screen session and can
+        point, draw, and hand over text — without a relay server, an S3 bucket, or a third-party SDK.
+      </h2>
+
+      <div class="code-box mb-6">
+        <button class="copy-btn" type="button" data-copy="#install-code">Copy</button>
+        <code id="install-code">&lt;script src="https://cdn.jsdelivr.net/gh/Spuds0588/SupportLayer@main/supportlayer.js" data-webhook="https://hooks.example.com/support" data-mode="chat" data-theme="#14b8a6"&gt;&lt;/script&gt;</code>
+      </div>
+      <p class="has-text-grey-light is-size-7" style="margin-top:-1.1rem">
+        Also served from GitHub Pages: <code>spuds0588.github.io/SupportLayer/supportlayer.js</code>
+      </p>
+
+      <div class="buttons is-centered mt-5">
+        <a href="#demo" class="btn-sl is-large"><i class="fas fa-play"></i> Try the simulated demo</a>
+        <a href="#docs" class="btn-sl btn-sl-ghost is-large"><i class="fas fa-book"></i> Read the docs</a>
+      </div>
+
+      <div class="sl-flow">
+        <span class="sl-flow-step"><i class="fas fa-comment-dots"></i> User hits report</span>
+        <span class="sl-flow-arrow a-1">→</span>
+        <span class="sl-flow-step st-2"><i class="fas fa-user-shield"></i> Local blur + 1-frame snapshot</span>
+        <span class="sl-flow-arrow a-2">→</span>
+        <span class="sl-flow-step st-3"><i class="fas fa-paper-plane"></i> POST to your webhook</span>
+        <span class="sl-flow-arrow a-3">→</span>
+        <span class="sl-flow-step st-4"><i class="fas fa-link"></i> Agent opens <code>?peer=</code></span>
+        <span class="sl-flow-arrow a-4">→</span>
+        <span class="sl-flow-step st-5"><i class="fas fa-wand-magic-sparkles fa-magic"></i> Point · draw · hand over text</span>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section class="section">
+  <div class="container">
+    <div class="columns is-multiline">
+      <div class="column is-4">
+        <div class="box is-standard">
+          <div class="feature-icon"><i class="fas fa-plug"></i></div>
+          <h3 class="title is-5">Drop-in configuration</h3>
+          <p>Everything comes from <code>data-*</code> attributes on the script tag: mode, theme, blur rules, and a JSON
+            field schema for the request form. Bad JSON falls back to a sane default instead of breaking your page.</p>
+        </div>
+      </div>
+      <div class="column is-4">
+        <div class="box is-standard">
+          <div class="feature-icon"><i class="fas fa-user-shield"></i></div>
+          <h3 class="title is-5">Privacy before capture</h3>
+          <p>Selector and regex redaction is applied to the DOM <em>first</em>, so the user physically sees blurred data in
+            the share prompt and the snapshot. Every wrap and injected style is fully unwound when the session ends.</p>
+        </div>
+      </div>
+      <div class="column is-4">
+        <div class="box is-standard">
+          <div class="feature-icon"><i class="fas fa-camera-retro"></i></div>
+          <h3 class="title is-5">Async reports that land</h3>
+          <p><code>mode="none"</code> is a pure bug report: one 70%-quality JPEG frame downscaled to 1280px, plus
+            diagnostics, POSTed with <code>keepalive</code> so it survives a navigation.</p>
+        </div>
+      </div>
+      <div class="column is-4">
+        <div class="box is-standard">
+          <div class="feature-icon"><i class="fas fa-satellite-dish"></i></div>
+          <h3 class="title is-5">Live P2P, no relay</h3>
+          <p>PeerJS opens a WebRTC data channel between the customer and the agent console. Your webhook only ever carries
+            the link — media never touches a server you have to pay for.</p>
+        </div>
+      </div>
+      <div class="column is-4">
+        <div class="box is-standard">
+          <div class="feature-icon"><i class="fas fa-crosshairs"></i></div>
+          <h3 class="title is-5">Laser, glass-pane, directed typing</h3>
+          <p>The agent clicks land on the customer's real DOM. Drawing renders as interaction-blocking strokes that clear
+            after 3s. Typing highlights the field and hands the text over for review instead of faking keystrokes.</p>
+        </div>
+      </div>
+      <div class="column is-4">
+        <div class="box is-standard">
+          <div class="feature-icon"><i class="fas fa-shield-alt"></i></div>
+          <h3 class="title is-5">Hardened by default</h3>
+          <p>Honeypot field, 60-second <code>sessionStorage</code> rate limit, and a required <code>isTrusted</code> click.
+            The widget UI lives in a Shadow DOM so no host stylesheet can reach it.</p>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section id="demo" class="section">
+  <div class="container">
+    <div class="has-text-centered mb-6">
+      <h2 class="title is-2 section-title">The simulated demo</h2>
+      <p class="section-sub">
+        The checkout below is a real page running the real <code>supportlayer.js</code>. The agent console on the right is a
+        real dashboard talking over a real data channel. Only two things are simulated: the screen capture (a synthetic
+        frame instead of a permission prompt) and the transport (a same-origin loopback bus instead of PeerJS) — so the
+        whole flow runs with no backend, no network, and no share prompt.
+      </p>
+    </div>
+
+    <div class="frame">
+      <div class="frame-bar">
+        <span class="dots"><i style="background:#ff5f57"></i><i style="background:#febc2e"></i><i style="background:#28c840"></i></span>
+        <span class="url">https://shop.sunnybakery.example/checkout</span>
+        <span class="tag">Customer app · real widget</span>
+      </div>
+      <iframe class="customer" id="customer-frame" src="demo-app.html" title="Simulated customer checkout running SupportLayer"></iframe>
+    </div>
+
+    <div class="demo-controls">
+      <button class="btn-sl" id="btn-break" type="button"><i class="fas fa-bug"></i> Break the checkout</button>
+      <button class="btn-sl btn-sl-ghost" id="btn-widget" type="button"><i class="fas fa-life-ring"></i> Open the widget</button>
+      <button class="btn-sl btn-sl-ghost" id="btn-reload" type="button"><i class="fas fa-rotate-right fa-redo"></i> Simulate a page reload</button>
+      <button class="btn-sl btn-sl-ghost" id="btn-reset" type="button"><i class="fas fa-trash-alt"></i> Reset demo</button>
+      <span class="spacer" style="flex:1"></span>
+      <span class="chip" id="chip-customer">customer: <b>idle</b></span>
+      <span class="chip" id="chip-agent">agent: <b>idle</b></span>
+      <span class="chip" id="chip-events">events: <b>0</b></span>
+    </div>
+
+    <div class="columns is-variable is-5" style="margin-top:6px">
+      <div class="column is-6">
+        <div class="frame">
+          <div class="frame-bar">
+            <span class="dots"><i style="background:#ff5f57"></i><i style="background:#febc2e"></i><i style="background:#28c840"></i></span>
+            <span class="url">agent.html?peer=sl-…&amp;demo=1</span>
+            <span class="tag">Agent console · real commands</span>
+          </div>
+          <iframe class="agent" id="agent-frame" src="agent.html?demo=1" title="SupportLayer agent console (simulated feed)"></iframe>
+        </div>
+      </div>
+      <div class="column is-6">
+        <div class="inspector">
+          <div class="frame">
+            <div class="frame-bar">
+              <span class="dots"><i style="background:#ff5f57"></i><i style="background:#febc2e"></i><i style="background:#28c840"></i></span>
+              <span class="url" id="inspector-url">POST https://hooks.example.com/supportlayer/demo</span>
+              <span class="tag">Mock webhook</span>
+            </div>
+            <div class="inspector-head">
+              <h3>Payload inspector</h3>
+              <span class="chip" id="chip-event">no events yet</span>
+              <span class="spacer" style="flex:1"></span>
+              <button class="mini-btn" id="btn-copy-payload" type="button"><i class="fas fa-copy"></i> Copy JSON</button>
+              <button class="mini-btn" id="btn-clear-events" type="button">Clear</button>
+            </div>
+            <div class="events" id="events"></div>
+            <pre class="payload" id="payload">// Nothing yet.
+//
+// 1. Hit "Break the checkout", then "Open the widget".
+// 2. Fill the form and submit — the snapshot and diagnostics land here.
+// 3. The agent console picks up the live link and dials in over the loopback bus.
+// 4. Point, draw, or hand over text from the console and watch the checkout react.</pre>
+            <div class="snapshot-row">
+              <img id="snapshot-img" alt="Captured snapshot">
+              <span class="meta" id="snapshot-meta">snapshot: none captured</span>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="columns" style="margin-top:2rem">
+      <div class="column is-8 is-offset-2">
+        <ol class="steps">
+          <li>Click <strong>Break the checkout</strong> so the failure is genuine — the payment gateway times out on purpose.</li>
+          <li>Open the widget (or the floating button inside the frame), fill the form, and submit. Coordinates, request and snapshot are redacted locally first.</li>
+          <li>Watch the inspector: the payload below is exactly what would have been POSTed to your webhook, including the redacted snapshot.</li>
+          <li>The agent console connects automatically. Click the feed to laser-point (a real DOM click fires), switch to <strong>Draw</strong>, or type text and click a field to hand it over.</li>
+          <li>Hit <strong>Simulate a page reload</strong>: <code>localStorage</code> brings the session back as a resume prompt instead of a silent drop.</li>
+        </ol>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section id="sisters" class="section">
+  <div class="container">
+    <div class="has-text-centered mb-6">
+      <h2 class="title is-2 section-title">The Layer family</h2>
+      <p class="section-sub">Three zero-backend layers that turn browser primitives into product features. MailLayer and
+        PhoneLayer are embedded on this page right now — the buttons below are live.</p>
+    </div>
+
+    <div class="columns is-variable is-5">
+      <div class="column is-6">
+        <div class="box is-demo" style="padding:0">
+          <div class="sister">
+            <h3><span class="dot" style="background:#e03616"></span> MailLayer Embedded</h3>
+            <p>Turns every <code>mailto:</code> link into a native compose window for Gmail, Outlook, or Yahoo — one line
+              of code, no OAuth, no API keys.</p>
+            <div class="line">
+              &lt;script src="https://embedded.maillayer.wiki/maillayer.js"&gt;&lt;/script&gt;
+              <button class="copy-btn" type="button" data-copy-text='&lt;script src="https://embedded.maillayer.wiki/maillayer.js"&gt;&lt;/script&gt;'>Copy</button>
+            </div>
+            <div class="actions">
+              <a class="mini-btn" href="mailto:hello@example.com?subject=Hello%20from%20the%20SupportLayer%20demo" title="A plain mailto: link, intercepted by MailLayer"><i class="fas fa-envelope"></i> mailto: link</a>
+              <button class="mini-btn maillayer-trigger" data-maillayer-to="burnsdevfeedback@gmail.com" data-maillayer-subject="SupportLayer feedback" data-maillayer-color="14b8a6" type="button">
+                <i class="fas fa-paper-plane"></i> Declarative trigger
+              </button>
+              <a class="mini-btn" href="https://spuds0588.github.io/MailLayer-Embedded/" target="_blank" rel="noopener">Site <i class="fas fa-external-link-alt"></i></a>
+            </div>
+            <p class="is-size-7" id="maillayer-note" style="color:#8b93a7"></p>
+          </div>
+        </div>
+      </div>
+      <div class="column is-6">
+        <div class="box is-demo" style="padding:0">
+          <div class="sister">
+            <h3><span class="dot" style="background:#7c5cff"></span> PhoneLayer Embedded</h3>
+            <p>Routes <code>tel:</code> and <code>sms:</code> links to 49 VoIP and SMS providers — app or web — and remembers
+              the visitor's choice. Still a single script tag.</p>
+            <div class="line">
+              &lt;script src="https://cdn.jsdelivr.net/gh/Spuds0588/PhoneLayer-Embedded@main/phonelayer.js"&gt;&lt;/script&gt;
+              <button class="copy-btn" type="button" data-copy-text='&lt;script src="https://cdn.jsdelivr.net/gh/Spuds0588/PhoneLayer-Embedded@main/phonelayer.js"&gt;&lt;/script&gt;'>Copy</button>
+            </div>
+            <div class="actions">
+              <a class="mini-btn" href="tel:+15551234567" title="A plain tel: link, intercepted by PhoneLayer"><i class="fas fa-phone-alt"></i> tel: link</a>
+              <button class="mini-btn phonelayer-trigger" data-phonelayer-to="+15551234567" type="button">
+                <i class="fas fa-comment-alt"></i> Declarative trigger
+              </button>
+              <a class="mini-btn" href="https://spuds0588.github.io/PhoneLayer-Embedded/" target="_blank" rel="noopener">Site <i class="fas fa-external-link-alt"></i></a>
+            </div>
+            <p class="is-size-7" id="phonelayer-note" style="color:#8b93a7"></p>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section id="docs" class="section">
+  <div class="container">
+    <div class="has-text-centered mb-6">
+      <h2 class="title is-2 section-title">Documentation</h2>
+      <p class="section-sub">Everything is configured from the script tag. There is nothing else to install.</p>
+    </div>
+
+    <div class="columns is-variable is-5">
+      <div class="column is-7">
+        <div class="box is-standard">
+          <h3 class="title is-5">Integration</h3>
+          <pre class="pre"><code><span class="c">&lt;!-- Drop-in: webhook, mode, theme,
+     redaction rules, form schema --&gt;</span>
+<span class="p">&lt;script</span>
+    src=<span class="c">"/supportlayer.js"</span>
+    data-webhook=<span class="c">"https://api.domain.com/webhook"</span>
+    data-mode=<span class="c">"chat"</span>
+    data-theme=<span class="c">"#14b8a6"</span>
+    data-blur-selectors=<span class="c">".sensitive-data, .balance"</span>
+    data-blur-regex=<span class="c">"(email|ssn)"</span>
+    data-fields=<span class="c">'[{"name":"name","type":"text",
+                  "label":"Your Name"},
+                 {"name":"issue","type":"textarea",
+                  "label":"Describe the bug"}]'</span>
+<span class="p">&gt;&lt;/script&gt;</span></code></pre>
+          <p class="mt-4">Modes: <code>none</code> (async report only), <code>chat</code> (data channel),
+            <code>audio</code> (agent mic), <code>video</code> (agent camera). Media never touches a server, and the
+            request form is generated from <code>data-fields</code>.</p>
+          <p class="mt-3 is-size-7" style="color:#8b93a7">CDN copy:
+            <code>cdn.jsdelivr.net/gh/Spuds0588/SupportLayer@main/supportlayer.js</code></p>
+        </div>
+      </div>
+      <div class="column is-5">
+        <div class="box is-standard">
+          <h3 class="title is-5">Headless API</h3>
+          <p>Set <code>data-headless="true"</code> to hide the floating button and drive everything from your own UI:</p>
+          <pre class="pre"><code>SupportLayer.requestHelp();
+SupportLayer.getState();
+<span class="c">  // IDLE · SENDING · WAITING · CONNECTED</span>
+SupportLayer.getSession();
+SupportLayer.endSession();
+SupportLayer.reset();
+
+<span class="c">// Public events on window:</span>
+<span class="p">"supportlayer:state"</span>
+<span class="p">"supportlayer:webhook"</span></code></pre>
+          <p class="mt-4 is-size-7" style="color:#8b93a7">The <code>supportlayer:webhook</code> event is what powers the
+            inspector on this page — integrators get the exact payload before it is sent.</p>
+        </div>
+      </div>
+    </div>
+
+    <div class="columns is-variable is-5">
+      <div class="column is-6">
+        <div class="box is-standard">
+          <h3 class="title is-5">Attributes</h3>
+          <table class="tbl">
+            <thead><tr><th>Attribute</th><th>Values</th><th>Purpose</th></tr></thead>
+            <tbody>
+              <tr><td><code>data-webhook</code></td><td>URL</td><td>Where reports are POSTed</td></tr>
+              <tr><td><code>data-mode</code></td><td>none · chat · audio · video</td><td>Async report or live P2P session</td></tr>
+              <tr><td><code>data-theme</code></td><td>hex</td><td>Brand colour for every widget surface</td></tr>
+              <tr><td><code>data-headless</code></td><td>true · false</td><td>Suppress the floating button</td></tr>
+              <tr><td><code>data-blur-selectors</code></td><td>CSS list</td><td>Elements blurred before capture</td></tr>
+              <tr><td><code>data-blur-regex</code></td><td>pattern list</td><td>Text nodes wrapped in a blurred span</td></tr>
+              <tr><td><code>data-fields</code></td><td>JSON</td><td>Dynamic request form</td></tr>
+              <tr><td><code>data-demo</code></td><td>true · false</td><td>Simulated capture + loopback transport</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+      <div class="column is-6">
+        <div class="box is-standard">
+          <h3 class="title is-5">Webhook payload</h3>
+          <pre class="pre"><code>{
+  <span class="p">"event_type"</span>: <span class="c">"support_request | support_update"</span>,
+  <span class="p">"session_id"</span>: <span class="c">"uuid-1234-5678"</span>,
+  <span class="p">"status"</span>:     <span class="c">"open | cancelled | completed"</span>,
+  <span class="p">"mode"</span>:       <span class="c">"chat"</span>,
+  <span class="p">"live_session_url"</span>: <span class="c">"agent.html?peer=sl-…"</span>,
+  <span class="p">"snapshot"</span>:   <span class="c">"data:image/jpeg;base64,…"</span>,
+  <span class="p">"user_data"</span>:  { <span class="p">"name"</span>: <span class="c">"Jane"</span>, <span class="p">"issue"</span>: <span class="c">"…"</span> },
+  <span class="p">"diagnostics"</span>: {
+    <span class="p">"url"</span>: <span class="c">"https://client-site.com/checkout"</span>,
+    <span class="p">"browser"</span>: <span class="c">"Mozilla/5.0 …"</span>,
+    <span class="p">"viewport"</span>: <span class="c">"1920x1080"</span>,
+    <span class="p">"timestamp"</span>: <span class="c">"2026-09-13T13:54:00Z"</span>,
+    <span class="p">"window_geometry"</span>: <span class="c">{ … }</span>
+  }
+}</code></pre>
+          <p class="mt-4 is-size-7" style="color:#8b93a7"><code>snapshot</code> is <code>null</code> when the user declines
+            the prompt or on <code>support_update</code> events. <code>window_geometry</code> lets the agent console map an
+            entire-screen capture back onto the page.</p>
+        </div>
+      </div>
+    </div>
+
+    <div class="box is-standard mt-5">
+      <h3 class="title is-5">Coordinate contract (read this before touching the overlay code)</h3>
+      <p>Every coordinate that travels over the data channel is normalized to <code>0.0 – 1.0</code> of the customer's
+        viewport. Pixels never cross the wire. The agent console normalizes against the <em>rendered</em> video geometry —
+        computing the <code>object-fit: contain</code> letterbox offset first — and, when the customer shared an entire
+        screen rather than a tab, offsets by the customer's reported window position and size. Get that wrong and clicks
+        drift by exactly the letterbox margin, which is why it is spelled out here.</p>
+      <p class="mt-3">The agent opens <code>agent.html?peer=&lt;client-peer-id&gt;</code> — the customer is the callee, so
+        the link your webhook carries is the only thing the agent needs. Screen sharing stays opt-in: the widget posts a
+        momentary snapshot at request time and never holds a capture stream open unless the user clicks
+        <strong>Share my screen</strong>.</p>
+    </div>
+  </div>
+</section>
+
+<footer class="footer">
+  <div class="container has-text-centered">
+    <p class="mb-4">⚡ Built by <a href="https://github.com/Spuds0588" target="_blank" rel="noopener">Spuds0588</a> — MIT licensed, no telemetry, no backend.</p>
+    <div class="links mb-5">
+      <a href="https://github.com/Spuds0588/SupportLayer" class="mx-3" target="_blank" rel="noopener">GitHub</a>
+      <a href="#demo" class="mx-3">Simulated demo</a>
+      <a href="agent.html" class="mx-3">Agent console</a>
+      <a href="test.html" class="mx-3">Test harness</a>
+      <a href="https://spuds0588.github.io/MailLayer-Embedded/" class="mx-3" target="_blank" rel="noopener">MailLayer</a>
+      <a href="https://spuds0588.github.io/PhoneLayer-Embedded/" class="mx-3" target="_blank" rel="noopener">PhoneLayer</a>
+    </div>
+
+    <div class="buttons is-centered" style="gap:.6rem">
+      <button class="mini-btn maillayer-trigger" data-maillayer-to="burnsdevfeedback@gmail.com" data-maillayer-subject="SupportLayer feedback" data-maillayer-color="14b8a6" type="button">
+        <i class="fas fa-envelope"></i> Get in touch
+      </button>
+      <button class="mini-btn phonelayer-trigger" data-phonelayer-to="+15551234567" type="button">
+        <i class="fas fa-phone-alt"></i> Call the demo line
+      </button>
+    </div>
+
+    <p class="mt-6 is-size-7">&copy; 2026 SupportLayer. Sister projects: MailLayer Embedded · PhoneLayer Embedded.</p>
+  </div>
+</footer>
+
+<!-- Sister projects, embedded live on this page. MailLayer has no working jsDelivr path
+     (the repo has no tagged release), so its own CDN wins and GitHub Pages is the fallback. -->
+<script src="https://embedded.maillayer.wiki/maillayer.js"
+        onload="window.__mailLayerLoaded = true"
+        onerror="window.__mailLayerFailed = true;
+                 (function () {
+                   var s = document.createElement('script');
+                   s.src = 'https://spuds0588.github.io/MailLayer-Embedded/maillayer.js';
+                   s.onload = function () { window.__mailLayerLoaded = true; };
+                   document.head.appendChild(s);
+                 })();"></script>
+<script src="https://cdn.jsdelivr.net/gh/Spuds0588/PhoneLayer-Embedded@main/phonelayer.js"
+        data-phonelayer-color="#7c5cff" data-phonelayer-theme="dark"
+        onload="window.__phoneLayerLoaded = true" onerror="window.__phoneLayerFailed = true"></script>
+
+<script>
+(function () {
+  "use strict";
+
+  /* ============================ background ============================ */
+  (function floatingIcons() {
+    var container = document.getElementById("floating-container");
+    if (!container) return;
+    var count = window.innerWidth < 700 ? 8 : 16;
+    for (var i = 0; i < count; i++) {
+      var ns = "http://www.w3.org/2000/svg";
+      var svg = document.createElementNS(ns, "svg");
+      svg.setAttribute("viewBox", "0 0 24 24");
+      svg.setAttribute("width", "70");
+      svg.setAttribute("height", "70");
+      svg.classList.add("floating-svg");
+      // Lifebuoy: ring + four spokes, drawn from primitives so it stays legible when blurred.
+      var ring = document.createElementNS(ns, "circle");
+      ring.setAttribute("cx", "12"); ring.setAttribute("cy", "12"); ring.setAttribute("r", "7");
+      svg.appendChild(ring);
+      var inner = document.createElementNS(ns, "circle");
+      inner.setAttribute("cx", "12"); inner.setAttribute("cy", "12"); inner.setAttribute("r", "3");
+      svg.appendChild(inner);
+      [[-1, -1], [1, -1], [1, 1], [-1, 1]].forEach(function (d) {
+        var line = document.createElementNS(ns, "line");
+        line.setAttribute("x1", String(12 + d[0] * 3.2)); line.setAttribute("y1", String(12 + d[1] * 3.2));
+        line.setAttribute("x2", String(12 + d[0] * 7)); line.setAttribute("y2", String(12 + d[1] * 7));
+        svg.appendChild(line);
+      });
+
+      var depth = Math.random() * 10;
+      var scale = 0.5 + depth * 0.25;
+      var blur = Math.max(0, depth - 7);
+      svg.style.left = Math.random() * 110 - 5 + "%";
+      svg.style.setProperty("--drift", Math.random() * 500 - 250 + "px");
+      svg.style.setProperty("--rotation", Math.random() * 720 - 360 + "deg");
+      svg.style.filter = "blur(" + blur + "px)";
+      svg.style.transform = "scale(" + scale + ") rotate(" + Math.random() * 360 + "deg)";
+      svg.style.zIndex = String(Math.floor(depth));
+      svg.style.opacity = String(0.08 + depth * 0.035);
+      svg.style.animation = "float-up " + (25 + Math.random() * 30) + "s linear infinite";
+      svg.style.animationDelay = Math.random() * -50 + "s";
+      container.appendChild(svg);
+    }
+  })();
+
+  /* ============================ copy buttons ============================ */
+  document.addEventListener("click", function (e) {
+    var btn = e.target.closest("[data-copy], [data-copy-text]");
+    if (!btn) return;
+    var text = btn.getAttribute("data-copy-text");
+    if (!text) {
+      var target = document.querySelector(btn.getAttribute("data-copy"));
+      text = target ? target.innerText : "";
+    }
+    var done = function (ok) {
+      var old = btn.innerHTML;
+      btn.innerHTML = ok ? "Copied!" : "Copy failed";
+      setTimeout(function () { btn.innerHTML = old; }, 1600);
+    };
+    if (navigator.clipboard && navigator.clipboard.writeText) {
+      navigator.clipboard.writeText(text).then(function () { done(true); }, function () { done(false); });
+    } else {
+      done(false);
+    }
+  });
+
+  /* ============================ sister-project status ============================ */
+  window.addEventListener("load", function () {
+    var mail = document.getElementById("maillayer-note");
+    var phone = document.getElementById("phonelayer-note");
+    if (mail) {
+      mail.textContent = window.__mailLayerLoaded
+        ? "Loaded from the MailLayer CDN — the two buttons above are live."
+        : "MailLayer could not be reached from any CDN (offline?) — the buttons above fall back to plain mailto: markup.";
+    }
+    if (phone) {
+      phone.textContent = window.__phoneLayerLoaded
+        ? "Loaded from jsDelivr — the two buttons above open the phone provider picker."
+        : "PhoneLayer could not be reached (offline?) — tel: and sms: links fall back to the OS handler.";
+    }
+  });
+
+  /* ============================ demo harness ============================ */
+  var customerFrame = document.getElementById("customer-frame");
+  var agentFrame = document.getElementById("agent-frame");
+  var payloadEl = document.getElementById("payload");
+  var eventsEl = document.getElementById("events");
+  var snapshotImg = document.getElementById("snapshot-img");
+  var snapshotMeta = document.getElementById("snapshot-meta");
+  var chipCustomer = document.querySelector("#chip-customer b");
+  var chipAgent = document.querySelector("#chip-agent b");
+  var chipEvents = document.querySelector("#chip-events b");
+  var chipEvent = document.getElementById("chip-event");
+
+  var events = [];          // [{ payload, size, at }]
+  var selected = -1;
+
+  function human(bytes) {
+    if (bytes < 1024) return bytes + " B";
+    if (bytes < 1024 * 1024) return (bytes / 1024).toFixed(1) + " KB";
+    return (bytes / 1048576).toFixed(2) + " MB";
+  }
+
+  function customerWindow() {
+    try { return customerFrame.contentWindow; } catch (e) { return null; }
+  }
+
+  function setChip(el, text, live) {
+    if (!el) return;
+    el.textContent = text;
+    el.parentElement.classList.toggle("live", !!live);
+  }
+
+  /* --- payloads arrive through the demo app's postMessage bridge --- */
+  window.addEventListener("message", function (e) {
+    var data = e.data || {};
+    if (data.type === "sl-webhook" && data.payload) {
+      events.unshift({ payload: data.payload, size: JSON.stringify(data.payload).length, at: new Date() });
+      if (events.length > 12) events.pop();
+      selectEvent(0);
+    }
+    if (data.type === "sl-state") {
+      setChip(chipCustomer, String(data.state || "idle").toLowerCase(), data.state === "CONNECTED");
+    }
+    if (data.type === "sl-ready") {
+      setChip(chipCustomer, "idle", false);
+    }
+  });
+
+  function selectEvent(i) {
+    if (!events.length) {
+      selected = -1;
+      payloadEl.textContent = "// No events yet — break the checkout, then open the widget.";
+      chipEvent.textContent = "no events yet";
+      snapshotImg.classList.remove("show");
+      snapshotMeta.textContent = "snapshot: none captured";
+      renderEventButtons();
+      return;
+    }
+    selected = i;
+    var entry = events[i];
+    var payload = entry.payload;
+    var snap = payload.snapshot;
+
+    // Keep the JSON readable: the image lives in its own preview pane.
+    var shown = Object.assign({}, payload);
+    if (shown.snapshot) shown.snapshot = "data:image/jpeg;base64,…(" + human(shown.snapshot.length) + ")";
+    payloadEl.textContent = JSON.stringify(shown, null, 2);
+
+    chipEvent.textContent = payload.event_type + " · " + payload.status + " · " + human(entry.size);
+    chipEvent.parentElement.classList.add("live");
+
+    if (snap && snap.indexOf("data:image") === 0) {
+      snapshotImg.src = snap;
+      snapshotImg.classList.add("show");
+      snapshotMeta.textContent =
+        "snapshot: " + (payload.capture ? payload.capture.width + "×" + payload.capture.height + " · " : "") +
+        human(snap.length) + " base64" + (payload.capture && payload.capture.label === "simulated" ? " · simulated capture" : "");
+    } else {
+      snapshotImg.classList.remove("show");
+      snapshotMeta.textContent = "snapshot: null (declined or update event)";
+    }
+    renderEventButtons();
+  }
+
+  function renderEventButtons() {
+    eventsEl.innerHTML = "";
+    events.forEach(function (ev, i) {
+      var b = document.createElement("button");
+      b.type = "button";
+      b.textContent = (i === selected ? "● " : "") + ev.payload.event_type.replace("support_", "") + " " +
+        ev.at.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit", second: "2-digit" });
+      b.className = i === selected ? "active" : "";
+      b.addEventListener("click", function () { selectEvent(i); });
+      eventsEl.appendChild(b);
+    });
+    setChip(chipEvents, String(events.length), events.length > 0);
+  }
+
+  document.getElementById("btn-copy-payload").addEventListener("click", function () {
+    if (selected < 0) return;
+    var text = JSON.stringify(events[selected].payload, null, 2);
+    var btn = this;
+    navigator.clipboard.writeText(text).then(function () {
+      var old = btn.innerHTML;
+      btn.innerHTML = '<i class="fas fa-check"></i> Copied';
+      setTimeout(function () { btn.innerHTML = old; }, 1500);
+    }, function () {});
+  });
+
+  document.getElementById("btn-clear-events").addEventListener("click", function () {
+    events = [];
+    selectEvent(-1);
+  });
+
+  /* --- controls --- */
+  function withCustomer(fn) {
+    var w = customerWindow();
+    if (!w || !w.__demoApp) return;
+    try { fn(w); } catch (e) { /* frame still loading */ }
+  }
+
+  document.getElementById("btn-break").addEventListener("click", function () {
+    withCustomer(function (w) { w.__demoApp.pay(); });
+  });
+  document.getElementById("btn-widget").addEventListener("click", function () {
+    withCustomer(function (w) { w.__demoApp.support(); });
+  });
+  document.getElementById("btn-reload").addEventListener("click", function () {
+    // The widget mirrors state to localStorage, so a reload should offer a resume prompt.
+    customerFrame.contentWindow.location.reload();
+  });
+  document.getElementById("btn-reset").addEventListener("click", function () {
+    withCustomer(function (w) {
+      if (w.SupportLayer) w.SupportLayer.reset();
+    });
+    events = [];
+    selectEvent(-1);
+    customerFrame.contentWindow.location.reload();
+    agentFrame.contentWindow.location.reload();
+  });
+
+  /* --- poll the two frames so the status strip never lies --- */
+  setInterval(function () {
+    var w = customerWindow();
+    if (w && w.SupportLayer) {
+      var state = w.SupportLayer.getState();
+      setChip(chipCustomer, String(state).toLowerCase(), state === "CONNECTED");
+    }
+    try {
+      var a = agentFrame.contentWindow;
+      if (a && a.__AgentConsole) {
+        var s = a.__AgentConsole.state();
+        setChip(chipAgent, s.connected ? "connected" : "listening", s.connected);
+      }
+    } catch (e) { /* ignore */ }
+  }, 900);
+
+  // Prime the inspector with a realistic empty state.
+  selectEvent(-1);
+})();
+</script>
+</body>
+</html>
