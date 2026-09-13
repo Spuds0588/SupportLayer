@@ -18,7 +18,13 @@ const ROOT = path.dirname(path.dirname(fileURLToPath(import.meta.url)));
 const HEADED = process.argv.includes("--headed");
 const ENV_PORT = Number(process.env.PORT); // some shells export PORT=0, which means "unset"
 const PORT = Number.isInteger(ENV_PORT) && ENV_PORT > 0 && ENV_PORT < 65536 ? ENV_PORT : 4181 + (HEADED ? 1 : 0);
-const BASE = `http://127.0.0.1:${PORT}`;
+// SL_BASE (or `--base <url>`) points the whole suite at an already-running origin —
+// e.g. the live GitHub Pages site — instead of booting the local dev server.
+const BASE_FLAG = process.argv.indexOf("--base");
+const LIVE_BASE = (process.env.SL_BASE || (BASE_FLAG !== -1 ? process.argv[BASE_FLAG + 1] : "") || "")
+  .trim()
+  .replace(/\/$/, "");
+const BASE = LIVE_BASE || `http://127.0.0.1:${PORT}`;
 const SHOT_DIR = path.join(ROOT, "screenshots");
 
 function findChrome() {
@@ -131,18 +137,24 @@ async function trustedShadowClick(frame, innerSelector, hostSelector = "#support
 async function main() {
   if (!existsSync(SHOT_DIR)) mkdirSync(SHOT_DIR, { recursive: true });
 
-  const server = spawn(process.execPath, ["serve.js"], {
-    cwd: ROOT,
-    env: { ...process.env, PORT: String(PORT) },
-    stdio: ["ignore", "pipe", "pipe"],
-  });
+  const server = LIVE_BASE
+    ? { kill() {}, stdout: { on() {} }, stderr: { on() {} } }
+    : spawn(process.execPath, ["serve.js"], {
+        cwd: ROOT,
+        env: { ...process.env, PORT: String(PORT) },
+        stdio: ["ignore", "pipe", "pipe"],
+      });
   server.stdout.on("data", () => {});
   server.stderr.on("data", (d) => process.stderr.write(`[serve] ${d}`));
 
   const up = await waitFor(async () => {
-    const res = await fetch(`${BASE}/index.html`, { method: "GET" });
-    return res.ok;
-  }, { timeout: 8000, interval: 150 });
+    try {
+      const res = await fetch(`${BASE}/index.html`, { method: "GET" });
+      return res.ok;
+    } catch (e) {
+      return false;
+    }
+  }, { timeout: LIVE_BASE ? 20000 : 8000, interval: 150 });
   if (!up) {
     console.error("dev server never came up");
     server.kill();
@@ -156,7 +168,9 @@ async function main() {
     process.exit(1);
   }
 
-  console.log(`\x1b[1mSupportLayer e2e\x1b[0m  ${HEADED ? "HEATED" : "headless"} · ${executablePath} · ${BASE}`);
+  console.log(
+    `\x1b[1mSupportLayer e2e\x1b[0m  ${HEADED ? "HEATED" : "headless"} · ${executablePath} · ${BASE}${LIVE_BASE ? " (live)" : ""}`
+  );
 
   const browser = await puppeteer.launch({
     executablePath,

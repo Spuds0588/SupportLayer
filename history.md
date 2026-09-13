@@ -81,3 +81,20 @@ hygiene, and desktop/mobile layout. Green headless **and** headed.
 **Environment facts.** `DISPLAY=:1` is available, so `--headed` runs are real. `gh` is
 authenticated as the repo owner. `Puppeteer` is pinned at 24.10.0 with
 `PUPPETEER_EXECUTABLE_PATH` unset because the suite auto-detects `google-chrome`.
+
+## 2026-09-13 — Session 2b: publish to GitHub Pages, then verify the *live* artifact
+
+**Pages.** `main` / root was already wired as the Pages source; it finished its first
+build and serves everything:
+`/`, `/supportlayer.js`, `/agent.html`, `/test.html`, `/demo-app.html`, `/favicon.svg`,
+`/README.md` — all HTTP 200 with the right content types. Live URL:
+https://spuds0588.github.io/SupportLayer/
+
+**New: `--base` / `SL_BASE` on the test runner.** The suite previously only ever tested the
+working tree, which means a Pages misconfiguration (capital-I `Index.html`, a path that
+404s once published, a stale deploy) would pass locally and fail in the wild. The runner
+now accepts `--base <url>` (`npm run test:live`) to point the identical 84 checks at an
+already-running origin and skip spawning `serve.js`.
+
+**Result.** 84/84 headless **and** 84/84 headed against the live Pages origin, console clean,
+zero failed same-origin requests. The published site is the same artifact that was tested.

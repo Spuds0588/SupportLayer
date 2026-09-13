@@ -127,14 +127,19 @@ reported window geometry. Pixels never cross the wire.
 ## Run it locally
 
 ```bash
-npm start          # zero-dependency static server on http://127.0.0.1:4174
-npm test           # headless Chromium end-to-end suite
+npm start            # zero-dependency static server on http://127.0.0.1:4174
+npm test             # headless Chromium end-to-end suite
 npm run test:headed  # same suite with a visible window (real rendering + input)
+npm run test:live    # the same 84 checks against the deployed GitHub Pages site
 ```
 
 The suite boots the server itself, drives the simulated demo end to end (request → redaction → webhook payload →
 agent connect → laser/draw/type → reload/resume → teardown), runs the in-page assertions in `test.html`, and fails on
 any console error, uncaught exception, or broken same-origin request.
+
+`test:live` passes `--base <url>` (equivalently `SL_BASE`) so the identical suite runs against a deployed origin —
+the same 84 checks pass against `https://spuds0588.github.io/SupportLayer/`, which is how the published page is
+verified rather than assumed.
 
 ## Repository layout
 

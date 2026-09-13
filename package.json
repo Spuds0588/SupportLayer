@@ -6,7 +6,8 @@
   "scripts": {
     "start": "node serve.js",
     "test": "node tests/e2e.mjs",
-    "test:headed": "node tests/e2e.mjs --headed"
+    "test:headed": "node tests/e2e.mjs --headed",
+    "test:live": "node tests/e2e.mjs --base https://spuds0588.github.io/SupportLayer"
   },
   "devDependencies": {
     "puppeteer-core": "24.10.0"

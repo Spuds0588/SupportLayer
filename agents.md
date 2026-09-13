@@ -116,6 +116,9 @@ breaks and the FAB/panel would cover the marketing page.
   `.sl-laser`, `.sl-draw-hint`, `.sl-typing`) all default to hidden and are only revealed
   while an agent command is live; the layout test asserts this on an idle page.
 - `PORT=0` is exported by some shells and means "unset" — both `serve.js` and the test runner treat it that way.
+- `--base <url>` (or `SL_BASE`) runs the identical suite against an already-running origin and
+  skips spawning `serve.js`. `npm run test:live` targets the deployed Pages site; **run it after
+  every push to `main`** so the published artifact, not just the working tree, is verified.
 - Both Chromium modes matter. Headless catches logic/console/network errors; **headed**
   catches rendering, `getDisplayMedia` permission flow, hover/focus behavior, and
   anything that depends on real window geometry.

@@ -3,8 +3,9 @@
 Status legend: `[x]` done, `[~]` in progress, `[ ]` not started.
 Mirrors PRD Part 3 plus the launch/hosting work.
 
-**v1 is built and green: 84/84 end-to-end checks pass in both headless and headed
-Chromium.** Remaining work is publishing (Phase 8) and the explicit backlog.
+**v1 is built, published, and green: 84/84 end-to-end checks pass in headless and headed
+Chromium, locally *and* against the live GitHub Pages origin.** Live at
+https://spuds0588.github.io/SupportLayer/. Remaining work is the explicit backlog.
 
 ## Phase 0 — Repo & docs  ✅ done
 - [x] Read `PRD-SupportLayer.md`; confirm scope with the maintainer's brief.
@@ -77,10 +78,13 @@ Chromium.** Remaining work is publishing (Phase 8) and the explicit backlog.
 - [x] Rate limiter + honeypot behave on second submit.
 - [x] Desktop + mobile layout sanity (no horizontal overflow, FAB inside the viewport).
 
-## Phase 8 — Ship  ⏳
+## Phase 8 — Ship  ✅ done
 - [x] Push `main` checkpoints as work landed.
-- [ ] Enable GitHub Pages on `main` and confirm the live URL serves both `index.html` and
-      `supportlayer.js`.
+- [x] GitHub Pages live on `main` / root: https://spuds0588.github.io/SupportLayer/
+      (`index.html`, `supportlayer.js`, `agent.html`, `test.html`, `demo-app.html`,
+      `favicon.svg` all return 200).
+- [x] `npm run test:live` — the full 84-check suite runs against the deployed origin
+      (headless and headed), so the published artifact is verified, not assumed.
 
 ## Backlog (explicitly not in v1)
 - [ ] Multiparty sessions / multiple agents per session.
