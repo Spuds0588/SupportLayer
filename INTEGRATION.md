@@ -447,7 +447,7 @@ and transport are simulated, so commands issued from it are genuine and land on 
 | `snapshot` is always `null` | Declined capture, unsupported browser, or insecure context | Serve over HTTPS or `localhost`. |
 | `live_session_url` points at a raw HTML page | Console hosted on a CDN | Let the default apply, or set `data-live-base` to a real HTML host. |
 | Live mode never connects | CSP blocks the PeerJS broker | Add `connect-src https://0.peerjs.com wss://0.peerjs.com`. |
-| Laser lands in the wrong place | Forked console not normalizing against the rendered video | Send normalized `0.0`–`1.0` only; account for letterboxing. |
+| Laser lands in the wrong place | Forked agent view not normalizing against the rendered video | Send normalized `0.0`–`1.0` only; account for letterboxing. |
 | Blur is missing on a regex | Pattern got comma-split | Use a JSON array, or avoid commas outside `{}`/`()`/`[]`. |
 | Form shows one textarea | Invalid `data-fields` JSON | Look for the `data-fields` warning in the console. |
 | Second click does nothing | 60-second per-session rate limit | Expected. `SupportLayer.reset()` clears it for testing. |

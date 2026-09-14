@@ -3,7 +3,7 @@
 Status legend: `[x]` done, `[~]` in progress, `[ ]` not started.
 Mirrors PRD Part 3 plus the launch/hosting work.
 
-**v2 is built, published, and green: 119/119 end-to-end checks pass in headless and headed
+**v2 is built, published, and green: 142/142 end-to-end checks pass in headless and headed
 Chromium, locally *and* against the live GitHub Pages origin.** Live at
 https://spuds0588.github.io/SupportLayer/. Remaining work is the explicit backlog.
 
@@ -113,6 +113,29 @@ v2 collapsed the two-page design into one: the agent no longer has a page of the
 - [x] Suite grew from 87 to 119 checks: role isolation, dock geometry (toast/coach line above
       the dock, dock above the stage floor), FAB inside the customer viewport, unparameterised
       pages staying customer-role, and "there is no agent page to fetch".
+
+## Phase 10 — Consistency sweep (docs · homepage · demo)  ✅ done
+- [x] Every reference document restated in the v2 vocabulary. `agent.html` now survives only where
+      it *should*: the PRD amendment, the `agents.md` prohibition, and the `todo.md` deletion note.
+- [x] `PRD-SupportLayer.md` §2.1 rewritten from "two primary components" to one component with two
+      roles, and `agent.html` struck through inline — not just flagged in the top banner, because a
+      reader scanning the deliverables section never sees the banner.
+- [x] PRD Phase 5 checklist ("Scaffold `agent.html`") converted to *delivered as one script, two
+      roles*, so it cannot be read as outstanding work.
+- [x] Homepage mode table corrected from the v1 one-way wording (`audio` = "agent mic",
+      `video` = "agent camera") to **two-way** in both directions.
+- [x] Homepage now states outright that **the mode is the developer's decision** and the user never
+      gets a chat/audio/video switcher.
+- [x] Homepage attribute table completed: `data-color`, `data-label`, `data-title`,
+      `data-chat-label`, `data-live-base`, `data-peer-cdn`, `?sl_mode=`, `?sl_color=`.
+- [x] "Agent console" retired everywhere in favour of **"agent view"** (source comments, the boot
+      log line, `test.html`, the harness dropdown, the suite's assertion labels).
+- [x] `test.html` mode options relabelled to "two-way voice" / "two-way voice + video".
+- [x] New `mode is dev-fixed` group: no channel switcher in the customer panel or the agent dock,
+      and the mode indicator must be an inert `<span>`, never a control.
+- [x] New `mode matrix` group: `data-mode` honoured for all four modes, with each mode's panel
+      heading, submit label, and channel-specific copy asserted.
+- [x] Suite 119 → 142 checks; green headless and headed, locally and live.
 
 ## Backlog (explicitly not in v2)
 - [ ] Multiparty sessions / multiple agents per session.

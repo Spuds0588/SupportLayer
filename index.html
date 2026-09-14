@@ -250,7 +250,7 @@
       <h2 class="subtitle">
         SupportLayer captures a one-frame snapshot, redacts the sensitive parts <em>before</em> capture, and POSTs the
         report straight to your webhook. When a report isn't enough, your support agent opens <em>the same URL</em> with
-        role parameters and lands in a full-screen console: the customer's screen, the chat, and a floating dock of
+        role parameters and lands in a full-screen agent view: the customer's screen, the chat, and a floating dock of
         annotation tools — without a relay server, an S3 bucket, a third-party SDK, or a second app to maintain.
       </h2>
 
@@ -377,7 +377,7 @@
           <div class="frame-bar">
             <span class="dots"><i style="background:#ff5f57"></i><i style="background:#febc2e"></i><i style="background:#28c840"></i></span>
             <span class="url">checkout?sl_role=agent&amp;peer=sl-…</span>
-            <span class="tag">Agent · same page, agent role</span>
+            <span class="tag">Agent · same page, one param</span>
           </div>
           <iframe class="agent" id="agent-frame" src="demo-app.html?sl_role=agent&amp;sl-demo=1" title="SupportLayer agent view — the same page in the agent role"></iframe>
         </div>
@@ -510,8 +510,12 @@
                   "label":"Describe the bug"}]'</span>
 <span class="p">&gt;&lt;/script&gt;</span></code></pre>
           <p class="mt-4">Modes: <code>none</code> (async report only), <code>chat</code> (data channel),
-            <code>audio</code> (agent mic), <code>video</code> (agent camera). Media never touches a server, and the
-            request form is generated from <code>data-fields</code>.</p>
+            <code>audio</code> (<strong>two-way</strong> voice), <code>video</code> (<strong>two-way</strong> voice and
+            video). Media never touches a server — even the call is peer-to-peer — and the request form is generated
+            from <code>data-fields</code>.</p>
+          <p class="mt-3">The mode is the <strong>developer's decision</strong>, fixed on the script tag. The user never
+            sees a chat/audio/video switcher: the request panel simply <em>becomes</em> whichever one you configured, on
+            both sides at once. Changing it is an edit to <code>data-mode</code> and a reload — not a user preference.</p>
           <p class="mt-3 is-size-7" style="color:#8b93a7">CDN copy:
             <code>cdn.jsdelivr.net/gh/Spuds0588/SupportLayer@main/supportlayer.js</code></p>
           <p class="mt-4"><a href="https://github.com/Spuds0588/SupportLayer/blob/main/INTEGRATION.md"
@@ -524,13 +528,13 @@
         <div class="box is-standard">
           <h3 class="title is-5">The agent role</h3>
           <p>Your webhook receives a URL that is the customer's page plus two parameters. Open it and the same script
-            becomes the support console — the request button is replaced by the customer's screen, the chat, and the tool dock.</p>
+            becomes the agent view — the request button is replaced by the customer's screen, the chat, and the tool dock.</p>
           <pre class="pre"><code><span class="c">// what live_session_url looks like</span>
 https://app.domain.com/checkout
    ?sl_role=agent&amp;peer=sl-7f3a91</code></pre>
           <p class="mt-3 is-size-7" style="color:#8b93a7">Nothing else is required — no separate portal, no extra
-            deployment. Whatever auth protects <code>/checkout</code> protects the console too, so agents sign in like any
-            other user. Options: <code>data-live-base</code> to point the link at a different page,
+            deployment. Whatever auth protects <code>/checkout</code> protects the agent view too, so agents sign in like
+            any other user. Options: <code>data-live-base</code> to point the link at a different page,
             <code>sl_mode</code> / <code>sl_color</code> to force a call mode or annotation colour.</p>
         </div>
       </div>
@@ -571,9 +575,17 @@ SupportLayer.reset();
               <tr><td><code>data-blur-selectors</code></td><td>CSS list</td><td>Elements blurred before capture</td></tr>
               <tr><td><code>data-blur-regex</code></td><td>pattern list</td><td>Text nodes wrapped in a blurred span</td></tr>
               <tr><td><code>data-fields</code></td><td>JSON</td><td>Dynamic request form</td></tr>
+              <tr><td><code>data-color</code></td><td>hex</td><td>Starting annotation colour for the agent dock</td></tr>
+              <tr><td><code>data-label</code></td><td>text</td><td>Floating button text (default “Get support”)</td></tr>
+              <tr><td><code>data-title</code></td><td>text</td><td>Request panel heading</td></tr>
+              <tr><td><code>data-chat-label</code></td><td>text</td><td>Heading of the live chat thread</td></tr>
+              <tr><td><code>data-live-base</code></td><td>URL or path</td><td>Override what <code>live_session_url</code> points at</td></tr>
+              <tr><td><code>data-peer-cdn</code></td><td>URL</td><td>Self-host the PeerJS broker script</td></tr>
               <tr><td><code>data-demo</code></td><td>true · false</td><td>Simulated capture + loopback transport</td></tr>
               <tr><td><code>?sl_role=agent</code></td><td>query param or <code>data-role</code></td><td>Boot into the agent view on this same page</td></tr>
               <tr><td><code>?peer=</code></td><td>peer id</td><td>Which customer the agent should dial</td></tr>
+              <tr><td><code>?sl_mode=</code></td><td>none · chat · audio · video</td><td>Force the channel by URL (the dev’s choice, not a UI)</td></tr>
+              <tr><td><code>?sl_color=</code></td><td>hex</td><td>Force the annotation colour by URL</td></tr>
             </tbody>
           </table>
         </div>

@@ -4,7 +4,7 @@
  *
  * One script, two roles. The customer loads the page normally. The agent opens the
  * SAME page with `?sl_role=agent&peer=<id>` and the widget boots into a full-screen
- * support console instead of the request button: the customer's screen, a chat
+ * agent view instead of the request button: the customer's screen, a chat
  * transcript, and a floating dock of annotation tools. There is no second app.
  *
  * Design rules that must not be broken (see agents.md / PRD-SupportLayer.md):
@@ -342,7 +342,7 @@
       referrer: document.referrer || null,
       platform: nav.platform || null,
       connection: conn && conn.effectiveType ? conn.effectiveType : null,
-      // Used by the agent console to map "entire screen" captures back onto the page.
+      // Used by the agent view to map "entire screen" captures back onto the page.
       window_geometry: geom
     };
   }
@@ -937,7 +937,7 @@
     ".sl-typing .sl-typing-actions button { flex: 1; padding: 8px 10px; border-radius: 9px; border: 0; font-size: 12px; font-weight: 700; background: var(--sl-theme); color: var(--sl-on-theme); }",
     ".sl-typing .sl-typing-actions button.sl-alt { background: rgba(255,255,255,.08); color: #dfe4ee; }",
 
-    /* ---------- agent console: stage ---------- */
+    /* ---------- agent view: stage ---------- */
     ".sl-agent { position: fixed; inset: 0; z-index: 2147483000; pointer-events: auto; display: flex; flex-direction: column; background: #05070b; color: #eef1f6; }",
     ".sl-stage { position: relative; flex: 1; min-height: 0; overflow: hidden; background: #05070b; }",
     ".sl-stage[data-tool='point'] { cursor: cell; }",
@@ -965,7 +965,7 @@
     ".sl-stage-empty code { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 12px; color: #9fe9dc; }",
     ".sl-stage-empty .sl-spin { margin: 0; }",
 
-    /* ---------- agent console: floating dock ---------- */
+    /* ---------- agent view: floating dock ---------- */
     ".sl-dock { position: absolute; left: 50%; bottom: 16px; transform: translateX(-50%); z-index: 9; display: flex; align-items: center; gap: 8px; padding: 8px; border-radius: 16px; background: rgba(13,16,22,.92); border: 1px solid rgba(255,255,255,.13); box-shadow: 0 22px 48px rgba(0,0,0,.6); max-width: calc(100% - 24px); flex-wrap: wrap; justify-content: center; }",
     ".sl-dock-group { display: flex; align-items: center; gap: 6px; }",
     ".sl-dock-sep { width: 1px; align-self: stretch; background: rgba(255,255,255,.12); margin: 2px 2px; }",
@@ -984,7 +984,7 @@
     ".sl-swatch[aria-pressed='true'] { border-color: #fff; box-shadow: 0 0 0 2px rgba(255,255,255,.22); }",
     ".sl-unread { display: inline-flex; align-items: center; justify-content: center; min-width: 17px; height: 17px; padding: 0 5px; border-radius: 999px; background: #ff5f57; color: #fff; font-size: 10px; font-weight: 800; }",
 
-    /* ---------- agent console: chat + info cards ---------- */
+    /* ---------- agent view: chat + what-is-happening card ---------- */
     ".sl-card { position: absolute; right: 16px; bottom: 96px; z-index: 8; width: min(348px, calc(100% - 32px)); max-height: min(440px, 62vh); display: flex; flex-direction: column; border-radius: 16px; background: rgba(13,16,22,.97); border: 1px solid rgba(255,255,255,.13); box-shadow: 0 24px 54px rgba(0,0,0,.6); overflow: hidden; }",
     ".sl-card[hidden] { display: none !important; }",
     ".sl-info-card { left: 16px; right: auto; }",
@@ -1764,7 +1764,7 @@
   }
 
   /* ====================================================================== *
-   * 12. Agent console
+   * 12. Agent view
    * ====================================================================== */
 
   var ag = {
@@ -3538,7 +3538,7 @@
     if (AGENT) {
       // One discovery round trip, then wait. Never a report, never a FAB.
       createTransport();
-      log("agent console ready — mode:", CFG.mode, "| demo:", CFG.demo, "| peer:", CFG.peer || "(discover)");
+      log("agent view ready — mode:", CFG.mode, "| demo:", CFG.demo, "| peer:", CFG.peer || "(discover)");
       renderAgentBadge();
       renderStageEmpty();
       return;

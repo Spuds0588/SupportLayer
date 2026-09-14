@@ -9,7 +9,7 @@ bundler, no runtime dependencies, no framework.
 
 - `supportlayer.js` — the product, **both roles**. Vanilla JS IIFE, one global
   `window.SupportLayer`. There is no agent page: the agent loads the *customer's own URL*
-  with `?sl_role=agent&peer=<id>` and this same script boots the agent console instead of
+  with `?sl_role=agent&peer=<id>` and this same script boots the agent view instead of
   the request button. Do not reintroduce a second HTML deliverable.
 - `index.html` — landing page + **simulated demo** (mock customer app, the same app again in
   the agent role, mock webhook inspector, MailLayer + PhoneLayer live demos).

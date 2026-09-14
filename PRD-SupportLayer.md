@@ -46,9 +46,9 @@
 ## Part 2: Implementation Guide
 
 ### 2.1 System Architecture
-The system consists of two primary components operating entirely client-side:
-1.  **`supportlayer.js` (The Client Injector):** Injects a Shadow DOM interface to prevent CSS bleeding. Manages local state, DOM mutation (blurring), WebRTC pairing, and webhook execution.
-2.  **`agent.html` (The Support Dashboard):** A standalone HTML file used by the support agent. It parses a `?peer=XYZ` URL parameter to connect to the client, stream the video, and translate agent interactions (clicks/draws) into normalized percentages `(0.0 to 1.0)` sent over the data channel.
+The system is **one client-side component with two roles** (see the v2 amendment above):
+1.  **`supportlayer.js` (The Client Injector) — customer role:** Injects a Shadow DOM interface to prevent CSS bleeding. Manages local state, DOM mutation (blurring), WebRTC pairing, and webhook execution. The request panel *becomes* the session: chat, or a two-way audio/video call, as fixed by `data-mode`.
+2.  ~~**`agent.html` (The Support Dashboard):**~~ **Superseded — do not build this.** The agent role is the same `supportlayer.js` on the customer's own URL, selected by `?sl_role=agent&peer=XYZ`. The script reads the peer id, streams the customer's video full-bleed, and translates agent interactions (clicks/draws) into normalized percentages `(0.0 to 1.0)` sent over the data channel. There is no second HTML file and no separate portal to host or authenticate.
 
 ### 2.2 Script Integration API
 Developers integrate the tool using the following configuration:
@@ -134,13 +134,15 @@ If `data-headless="true"`, the floating action button (FAB) is suppressed, and t
 - [ ] Implement `handleRemoteType(x, y, text)`: Outline the target input, inject a floating tooltip with a "Copy" button, and handle clipboard injection.
 - [ ] Implement `handleRemoteDraw(lines)`: Render coordinate arrays onto a fixed `<canvas>`, temporarily set `pointer-events: auto` to block interaction, and clear context via timeout after 3 seconds of inactivity.
 
-### Phase 5: Agent Dashboard (Agent Side)
-- [ ] Scaffold `agent.html` with basic CSS grid/flexbox UI.
-- [ ] Implement URL parameter parsing to extract the target `peer` ID.
-- [ ] Setup PeerJS connection logic to connect data channels and answer video streams.
-- [ ] Build Coordinate Normalization logic: Calculate exact relative `x`/`y` percentages `(0-1)` of mouse events on the video tag, accounting for `object-fit: contain` letterboxing.
-- [ ] Map MouseDown/MouseMove events to the selected toolbar state (Laser Click, Direct Type, Draw).
-- [ ] Ensure Draw coordinates are batched and sent via DataChannel at 60fps or standard mouse-move intervals.
+### Phase 5: Agent View (Agent Side) — *implemented inside `supportlayer.js`, not a second file*
+> **Delivered as one script, two roles.** The items below are the original framing of a separate
+> dashboard; they all now live in `supportlayer.js` and are gated behind `AGENT_ROLE`.
+- [x] Agent surface lives in `supportlayer.js` (nothing to scaffold; `agent.html` was deleted).
+- [x] URL parameter parsing to extract the target `peer` ID (`?sl_role=agent&peer=…`).
+- [x] PeerJS connection logic for data channels and answering media streams (both directions).
+- [x] Coordinate normalization: relative `x`/`y` percentages `(0-1)` of mouse events on the rendered video, accounting for `object-fit: contain` letterboxing.
+- [x] Map MouseDown/MouseMove events to the selected dock tool (Point, Click, Type, Draw).
+- [x] Draw coordinates batched and sent via DataChannel on mouse-move intervals.
 
 ---
 
@@ -165,9 +167,9 @@ When modifying the widget state:
 *   Because WebRTC connections do not survive a page reload, returning to an active state (`WAITING` or `CONNECTED`) without an active Peer connection must trigger the `view-resume` UI. Do not attempt to automatically reconstruct a dropped WebRTC connection without user interaction, as browsers will block automated media requests without a trusted user gesture.
 
 #### 4. Coordinate Math Considerations
-When modifying `agent.html` or the drawing logic in `supportlayer.js`:
+When modifying the agent view (the `AGENT` branch of `supportlayer.js`) or the drawing logic:
 *   All coordinates sent over the data channel **must** be normalized to percentages (`0.0` to `1.0`). Never send absolute pixel values. 
-*   The Agent Dashboard must calculate coordinates based on the *rendered* video dimensions, not the DOM element dimensions. Calculate the aspect ratio offset (`object-fit: contain` letterboxing) before normalizing the coordinates, or clicks/drawings will misalign on the client's screen.
+*   The agent view must calculate coordinates based on the *rendered* video dimensions, not the DOM element dimensions. Calculate the aspect ratio offset (`object-fit: contain` letterboxing) before normalizing the coordinates, or clicks/drawings will misalign on the client's screen.
 
 #### 5. DOM Manipulation and Privacy
 *   The widget UI must remain inside the Shadow DOM to prevent host site CSS interference. 

@@ -179,3 +179,50 @@ live origin.
 `elementHandle.click()` (it waits on `requestAnimationFrame`). The suite now clicks at measured
 viewport coordinates with `page.mouse`, which is both compositor-independent and closer to what a
 real user does.
+
+## 2026-09-14 — Session 3: consistency sweep, then confirm it in production
+
+The v2 restructure was already green, but the product's *words* had not caught up with it. This
+session was about making every surface tell the same story, then proving it from the deployed
+origin rather than the working tree.
+
+**The homepage was the worst offender.** Its mode table still described the v1 one-way media —
+`audio` as "agent mic", `video` as "agent camera" — which is exactly backwards now that both
+directions stream. Rewritten to **two-way** in both. The attribute table was also missing eight
+things the code actually reads (`data-color`, `data-label`, `data-title`, `data-chat-label`,
+`data-live-base`, `data-peer-cdn`, `?sl_mode=`, `?sl_color=`), so an integrator reading the docs
+could not discover them.
+
+**The rule the maintainer corrected is now enforced, not just documented.** The mode is the
+developer's decision via `data-mode`; there is no user-facing channel switcher. Nothing in the
+suite pinned that, so a `chat | audio | video` segment control could have been re-introduced and
+passed CI. Two new groups close that:
+
+- **`mode is dev-fixed`** — scans the customer panel and the agent dock for any `select`,
+  `[data-seg]`, `[role=tablist]`, or `[role=radiogroup]` that offers two or more of
+  `chat`/`audio`/`video`, and asserts the visible mode indicator is an inert `<span>`. This is the
+  assertion that fails if the thing I built and you rejected ever comes back.
+- **`mode matrix`** — all four modes boot through the local server, and each one must ask for the
+  right thing: `none` promises a *report* and offers "Send report"; `chat` says "chat live";
+  `audio` says "talk it through"; `video` says "video call". A mode that silently behaves like
+  another mode now fails.
+
+**`PRD-SupportLayer.md` needed more than its banner.** The v2 amendment at the top was correct but
+easy to miss: §2.1 still listed two components, and the Phase 5 checklist still opened with
+"Scaffold `agent.html`" — which an editing agent would reasonably read as outstanding work. §2.1 is
+now one component with two roles, the `agent.html` bullet is struck through with a redirect, and
+Phase 5 is marked delivered as one script. The banner stays; it just isn't load-bearing any more.
+
+**Vocabulary.** "Agent console" is gone from the codebase (header comment, four section banners,
+the boot log line), `test.html`, the harness's mode dropdown, and the suite's own assertion labels.
+"Agent view" throughout. `test.html`'s mode options now read "two-way voice" and "two-way voice +
+video" instead of the v1 one-way wording.
+
+**Tests: 119 → 142.** Green headless (142/142) and headed (142/142). The headed run is stable now
+that the suite clicks at measured viewport coordinates instead of via `elementHandle.click()`.
+
+**Verified from the other side of the wire.** Pages built the pushed commit; `/`, `/supportlayer.js`,
+`/test.html`, `/demo-app.html`, `/INTEGRATION.md`, `/favicon.svg` all 200 with correct content types
+and `/agent.html` still a 404. Then the identical 142 checks ran against
+`https://spuds0588.github.io/SupportLayer` — headless and headed — so the published artifact is the
+artifact that was tested.

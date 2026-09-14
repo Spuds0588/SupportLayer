@@ -59,8 +59,8 @@
       <select id="f-mode">
         <option value="none">none — async report only</option>
         <option value="chat" selected>chat — data channel</option>
-        <option value="audio">audio — agent mic</option>
-        <option value="video">video — agent camera</option>
+        <option value="audio">audio — two-way voice</option>
+        <option value="video">video — two-way voice + video</option>
       </select>
 
       <label for="f-theme">data-theme</label>
@@ -133,9 +133,9 @@
       <h2>Manual flow</h2>
       <ol class="hint" style="padding-left:18px;margin:0">
         <li>Load the widget, then trigger <span class="kbd">SupportLayer.requestHelp()</span> from the floating button (or
-          the console) and submit the form.</li>
+          your own button) and submit the form.</li>
         <li>Open the <span class="kbd">live_session_url</span> from the payload — it is this very page plus
-          <span class="kbd">?sl_role=agent&amp;peer=…</span>, so the widget boots into the agent console instead of the
+          <span class="kbd">?sl_role=agent&amp;peer=…</span>, so the widget boots into the agent view instead of the
           request button. Two browser windows are required for the real PeerJS path;
           <span class="kbd">data-demo</span> uses the loopback bus inside one page.</li>
         <li>For the real WebRTC path, turn <span class="kbd">data-demo</span> off and serve over http or https — capture
@@ -272,7 +272,7 @@
       if (!api) return "no widget";
       return api.role === "user" ? true : "role is " + api.role;
     });
-    assert("the agent console seam is absent for customers", function () {
+    assert("the agent-view seam is absent for customers", function () {
       if (!api) return "no widget";
       return api.agent === undefined ? true : "SupportLayer.agent leaked into the customer role";
     });

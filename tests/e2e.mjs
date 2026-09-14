@@ -253,8 +253,8 @@ async function main() {
     });
     check("agent role exposes its test seam", !!agentSeam);
     eq("the agent frame runs the widget in the agent role", agentSeam?.role, "agent");
-    eq("agent console is in demo mode", agentSeam?.demo, true);
-    eq("agent console starts disconnected", agentSeam?.connected, false);
+    eq("agent view is in demo mode", agentSeam?.demo, true);
+    eq("agent view starts disconnected", agentSeam?.connected, false);
     eq("the default tool is point, not a destructive click", agentSeam?.tool, "point");
 
     const agentShell = await agentFrame.evaluate(() => {
@@ -399,6 +399,51 @@ async function main() {
     check("the live panel is a chat (transcript + composer)", customerPanel.hasComposer && customerPanel.hasTranscript);
     check("video sessions expose call controls", customerPanel.actions.join("|").includes("Mute"), customerPanel.actions.join("|"));
     check("the demo simulates the screen share so the agent has a feed", customerPanel.screenOn);
+
+    /* ---------- the channel is the developer's decision, not a user control ----------
+     * `data-mode` picks the channel at install time and the panel simply BECOMES that channel.
+     * A chat/audio/video switcher in the UI would be a regression: if this fails, someone has
+     * re-introduced a user-facing preference. Change the channel by editing `data-mode`. */
+    group("mode is dev-fixed");
+    const switcherScan = async (frame, label) =>
+      frame.evaluate(() => {
+        const root = document.querySelector("#supportlayer-root").shadowRoot;
+        const names = ["chat", "audio", "video"];
+        const suspects = [];
+        root.querySelectorAll("select, [data-mode], [data-channel], [data-seg], .sl-seg, [role=tablist], [role=radiogroup], [role=tab]").forEach((el) => {
+          if (el.tagName === "SELECT") {
+            const vals = Array.prototype.map.call(el.options, (o) => String(o.value || "").toLowerCase());
+            if (names.filter((n) => vals.includes(n)).length >= 2) suspects.push("select:" + vals.join(","));
+          } else {
+            suspects.push(el.tagName.toLowerCase() + "." + String(el.className || ""));
+          }
+        });
+        // The mode indicator may exist, but it must be inert text, never a control.
+        const chip = root.querySelector(".sl-live-mode");
+        return {
+          suspects,
+          chipTag: chip ? chip.tagName.toLowerCase() : null,
+          chipText: chip ? chip.textContent.trim() : null,
+        };
+      });
+    const customerSwitcher = await switcherScan(customerFrame);
+    check(
+      "the customer panel offers no channel switcher",
+      customerSwitcher.suspects.length === 0,
+      customerSwitcher.suspects.join(" | ") || "clean"
+    );
+    check(
+      "the mode is shown as inert text, not a control",
+      customerSwitcher.chipTag === "span" && customerSwitcher.chipText === "video",
+      JSON.stringify(customerSwitcher)
+    );
+    const agentSwitcher = await switcherScan(agentFrame);
+    check(
+      "the agent dock offers no channel switcher",
+      agentSwitcher.suspects.length === 0,
+      agentSwitcher.suspects.join(" | ") || "clean"
+    );
+
 
     /* ---------- the dock must not eat its own overlays ---------- */
     group("agent dock clearance");
@@ -690,16 +735,16 @@ async function main() {
     await roleProbe.goto(`${BASE}/test.html?sl_role=agent&peer=sl-probe`, { waitUntil: "domcontentloaded" });
     // NB: only `sl_role` is authoritative — a host app's own `role=` is left alone.
     const probed = await waitFor(() => roleProbe.evaluate(() => !!(window.SupportLayer && window.SupportLayer.agent)));
-    check("sl_role=agent switches the very same page into the console", probed);
+    check("sl_role=agent switches the very same page into the agent view", probed);
     eq("the agent knows which peer it was pointed at", await roleProbe.evaluate(() => window.SupportLayer.agent.state().peer), "sl-probe");
     check(
       "the agent role leaves the host page's privacy alone",
       await roleProbe.evaluate(() => !document.getElementById("supportlayer-privacy-css")),
       "an agent must never redact the page it is looking at"
     );
-    await roleProbe.close();    group("test harness (test.html)");
+    await roleProbe.close();
 
-
+    group("test harness (test.html)");
     const badge = await waitFor(async () => {
       const t = await harness.$eval("#cfg-badge", (el) => el.textContent);
       return t.includes("mode=") ? t : false;
@@ -757,7 +802,7 @@ async function main() {
     watch(standalone, "agent-role");
     await standalone.goto(`${BASE}/demo-app.html?sl_role=agent&sl-demo=1`, { waitUntil: "domcontentloaded" });
     const standaloneOk = await waitFor(() => standalone.evaluate(() => !!(window.SupportLayer && window.SupportLayer.agent)), { timeout: 5000 });
-    check("a page with ?sl_role=agent boots the console", standaloneOk);
+    check("a page with ?sl_role=agent boots the agent view", standaloneOk);
     const standaloneShell = await standalone.evaluate(() => {
       const root = document.querySelector("#supportlayer-root").shadowRoot;
       const agentEl = root.querySelector(".sl-agent").getBoundingClientRect();
@@ -769,14 +814,14 @@ async function main() {
         noFab: !root.querySelector(".sl-fab"),
       };
     });
-    check("the console covers the host app instead of sitting on it", standaloneShell.coversViewport && standaloneShell.coversTheApp, JSON.stringify(standaloneShell));
+    check("the agent view covers the host app instead of sitting on it", standaloneShell.coversViewport && standaloneShell.coversTheApp, JSON.stringify(standaloneShell));
     check("with no customer it waits, and never shows the request button", standaloneShell.waiting && standaloneShell.noFab, JSON.stringify(standaloneShell));
     if (HEADED) await standalone.screenshot({ path: path.join(SHOT_DIR, "agent-headed.png") });
     await standalone.close();
 
     /* ============================= CDN delivery =============================
      * The quick-start snippet loads the widget from jsDelivr, which serves `.html` as
-     * text/plain — the old architecture pointed at a broken console URL because of it.
+     * text/plain — the old architecture pointed at a broken agent URL because of it.
      * There is no second file to fetch any more, which this asserts. */
     group("CDN delivery");
     const cdnPage = await browser.newPage();
@@ -803,6 +848,51 @@ async function main() {
       "an agent.html reference crept back into the widget"
     );
     await cdnPage.close();
+
+    /* ============================= mode matrix =============================
+     * `data-mode` is the developer's single switch, fixed at install time. Each mode must
+     * shape the request panel itself — copy and controls — with no user-facing switcher. */
+    group("mode matrix");
+    const MODE_SPEC = {
+      none: { head: "Send a report", button: "Send report", blurb: /snapshot/i, call: false },
+      chat: { head: "Start a live session", button: "Start session", blurb: /chat live/i, call: false },
+      audio: { head: "Start a live session", button: "Start session", blurb: /talk it through/i, call: false },
+      video: { head: "Start a live session", button: "Start session", blurb: /video call/i, call: false },
+    };
+    for (const mode of Object.keys(MODE_SPEC)) {
+      const spec = MODE_SPEC[mode];
+      const modePage = await browser.newPage();
+      watch(modePage, `mode=${mode}`);
+      await modePage.setContent(
+        `<!doctype html><html><body><script src="${BASE}/supportlayer.js" data-webhook="" data-mode="${mode}" data-demo="true"></script></body></html>`,
+        { waitUntil: "domcontentloaded" }
+      );
+      const modeBooted = await waitFor(() => modePage.evaluate(() => !!(window.SupportLayer && window.SupportLayer.config)), { timeout: 6000 });
+      eq(`data-mode="${mode}" is honoured`, modeBooted ? await modePage.evaluate(() => window.SupportLayer.config.mode) : null, mode);
+      const form = await modePage.evaluate(() => {
+        const root = document.querySelector("#supportlayer-root").shadowRoot;
+        const v = root.querySelector(".sl-view[data-view=form]");
+        const names = ["chat", "audio", "video"];
+        const switchers = [];
+        root.querySelectorAll("select, [data-seg], [role=tablist], [role=radiogroup]").forEach((el) => {
+          if (el.tagName === "SELECT") {
+            const vals = Array.prototype.map.call(el.options, (o) => String(o.value || "").toLowerCase());
+            if (names.filter((n) => vals.includes(n)).length >= 2) switchers.push("select");
+          } else switchers.push(el.tagName.toLowerCase());
+        });
+        return {
+          head: v.querySelector("h3").textContent.trim(),
+          button: v.querySelector("button[type=submit]").textContent.trim(),
+          blurb: v.querySelector("p").textContent.trim(),
+          switchers,
+        };
+      });
+      eq(`mode=${mode}: request panel heading`, form.head, spec.head);
+      eq(`mode=${mode}: submit button label`, form.button, spec.button);
+      check(`mode=${mode}: the panel describes that channel`, spec.blurb.test(form.blurb), form.blurb);
+      check(`mode=${mode}: no channel switcher in the panel`, form.switchers.length === 0, form.switchers.join(",") || "clean");
+      await modePage.close();
+    }
 
     /* ============================= console hygiene ============================= */
     group("console hygiene");
