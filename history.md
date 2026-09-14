@@ -233,3 +233,29 @@ line shipped a script tag that resolves to a 404 — and the same file's header 
 now recommends an immutable **commit SHA** (always valid, no release step) or a release tag once
 one exists, and states the current version explicitly. `package.json` was still on 1.0.0, so the
 three version sources (file header, `SupportLayer.version`, manifest) now agree at 2.0.0.
+
+**Session 4 — the homepage stopped teaching and started selling.** The landing page had grown into a
+second, worse copy of the integration guide: an 18-row attribute table, the full webhook payload
+JSON, an essay on the coordinate contract, and a headless-API listing — all of it already in
+`INTEGRATION.md`, and all of it in the reader's way before they had decided to care. "Documentation"
+is now **"Getting started"**: the install snippet, one paragraph on what `data-mode` buys, and one
+button through to the guide. Everything configurable is documented in one place, and the homepage
+says so out loud.
+
+The feature grid went from six boxes of implementation detail to four sentences of why you'd want
+it, and the demo walkthrough from six steps to four. The page now reads hero → why → demo → install
+→ footer.
+
+**The sister projects went quiet.** There was a whole "The Layer family" section — two cards with
+copy buttons, live trigger buttons, and CDN status notes — sitting between the demo and the docs,
+plus two more buttons in the footer. For a page whose job is to sell *this* library, that was a lot
+of someone else's advertising. The section is gone and the two projects are now one dim, lowercase
+line at the very bottom: named, linked, unexplained. The MailLayer and PhoneLayer scripts are still
+loaded, so a `mailto:` or `tel:` link on the page is still upgraded silently, but nothing on the page
+points that out.
+
+Dead code from the deleted sections went with it: the `.sister` and `.tbl` rule sets, the
+sister-status DOM updates, and the `.is-demo` box variant.
+
+**142/142 still green** headless and headed, including the mobile layout checks (no horizontal
+overflow, nav drops into the flow).

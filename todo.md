@@ -137,6 +137,22 @@ v2 collapsed the two-page design into one: the agent no longer has a page of the
       heading, submit label, and channel-specific copy asserted.
 - [x] Suite 119 → 142 checks; green headless and headed, locally and live.
 
+## Phase 11 — Homepage refocus (sell it, don't teach it)  ✅ done
+- [x] Cut the “Layer family” showcase section outright. MailLayer and PhoneLayer are now one quiet
+      line at the very bottom of the footer — named, linked, unexplained.
+- [x] Removed the footer's “Get in touch” / “Call the demo line” buttons, which existed to show off
+      the sister layers. The embeds stay, so a `mailto:`/`tel:` link on the page is still upgraded
+      silently; nothing on the page advertises that.
+- [x] Deleted the homepage's reference material: the headless-API block, the 18-row attribute
+      table, the full webhook payload JSON, and the coordinate-contract essay. All of it already
+      lived in `INTEGRATION.md`, and the homepage now says where to go instead.
+- [x] “Documentation” → **“Getting started”**: the install snippet, one paragraph on what
+      `data-mode` buys you, and a single button through to the integration guide.
+- [x] Feature grid cut from six technical boxes to four short selling points; demo walkthrough cut
+      from six steps to four.
+- [x] Lede buttons and nav renamed to match (“How it's installed”, “Getting started”).
+- [x] Page now reads: hero → why → demo → install → footer.
+
 ## Backlog (explicitly not in v2)
 - [ ] Multiparty sessions / multiple agents per session.
 - [ ] A real two-browser WebRTC pass: `getDisplayMedia` permission flow and live agent media
