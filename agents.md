@@ -144,6 +144,17 @@ It turns the demo fixture into a real session with `demo-app.html?sl-demo=0` —
 that ships as a demo could never be tested for real. Run it before touching transport, media or the
 role handshake.
 
+**What it cannot tell you: whether the picture is right.** `--use-fake-device-for-media-stream`
+supplies Chrome's synthetic test pattern, and on this host that is the only option — there is no window
+manager, so capture selection only ever offers the DISPLAY (`displaySurface: monitor` even with
+`--auto-select-desktop-capture-source`, `--auto-select-tab-capture-source-by-title` or
+`preferCurrentTab`), and `--use-file-for-fake-video-capture` is ignored on the display path (frames
+are byte-identical with and without it). Sharing the display would also put the operator's whole
+desktop in front of the agent, which is never what a support session is for. So the tool proves
+signalling, permission, track, decode and coordinates; for a picture the agent can actually read — and
+to exercise the real capture picker — open `demo-app.html?sl-demo=0` in a normal browser and share
+from there.
+
 ## Agent experience (`?sl_role=agent&peer=<clientPeerId>`)
 
 The agent role is the same document with a param, so `AGENT` is true and `mountAgent()` replaces the

@@ -145,11 +145,25 @@ async function selfCheck(browser, liveUrl) {
         const sr = document.querySelector("#supportlayer-root").shadowRoot;
         const v = sr.querySelector(".sl-feed");
         const st = v && v.srcObject;
-        return st && st.getVideoTracks().length ? { tracks: st.getVideoTracks().length, size: `${v.videoWidth}x${v.videoHeight}`, live: v.classList.contains("sl-on") } : false;
+        if (!st || !st.getVideoTracks().length) return false;
+        const t = st.getVideoTracks()[0];
+        const s = (t.getSettings && t.getSettings()) || {};
+        return {
+          tracks: st.getVideoTracks().length,
+          size: `${v.videoWidth}x${v.videoHeight}`,
+          live: v.classList.contains("sl-on"),
+          surface: s.displaySurface || null,
+          label: t.label || "",
+        };
       }),
     { timeout: 40000, label: "the customer's screen track" }
   );
   check("a real screen track reaches the agent stage", !!feed && feed.tracks > 0, JSON.stringify(feed));
+  // Remote tracks do not carry `displaySurface` across the hop (the label is just "remote video"),
+  // so read the customer's own capture label out of the agent's metadata — the same string the
+  // agent's info card shows it. It is the only way to tell what a session is actually sharing.
+  const captLabel = await agent.evaluate(() => (window.SupportLayer.agent.state().client || {}).capture_label || "");
+  check("the agent is told what was captured", /^screen:/.test(captLabel), `capture_label=${captLabel}`);
 
   // A track that arrived is not a picture yet — decoding takes a moment, and a 0×0 video is
   // exactly the failure this check exists for (the old bug left the stage permanently blank).
@@ -185,6 +199,32 @@ const server = spawn(process.execPath, [path.join(ROOT, "serve.js")], {
   stdio: "ignore",
 });
 
+/*
+ * `--use-fake-ui-for-media-stream` auto-accepts the capture prompt, and
+ * `--auto-select-desktop-capture-source` says what it accepts. The two modes want different
+ * sources: headless has no windows, so the only thing to share is its virtual display, while a
+ * visible run should share **its own window** — sharing the whole screen would put the operator's
+ * desktop in front of the agent, which is not what a support session is for.
+ */
+const VIEWPORT = HEADED ? { width: 1180, height: 760 } : { width: 1280, height: 860 };
+
+/*
+ * The capture source.
+ *
+ * `--use-fake-ui-for-media-stream` auto-accepts, and `--use-fake-device-for-media-stream` supplies
+ * the pixels — which are Chrome's synthetic test pattern, not a page. That is a limitation worth
+ * naming rather than hiding: this host has no window manager, so Chrome's capture selection only
+ * ever offers the DISPLAY (`displaySurface: monitor`, confirmed against
+ * `--auto-select-desktop-capture-source`, `--auto-select-tab-capture-source-by-title` and
+ * `preferCurrentTab`, all of which still returned the monitor). Sharing the display would put the
+ * operator's whole desktop in front of the agent, and `--use-file-for-fake-video-capture` is ignored
+ * on the display path (verified: byte-identical frames with and without it).
+ *
+ * So this script proves the plumbing — signalling, permission, track, decode, coordinates against a
+ * real DOM — while the *picture* stays synthetic. For a session where the agent can read the page,
+ * open `demo-app.html?sl-demo=0` in your own browser and pick what to share there; that is also the
+ * only way to exercise the real picker.
+ */
 const browser = await puppeteer.launch({
   executablePath: chrome,
   headless: !HEADED,
@@ -193,9 +233,8 @@ const browser = await puppeteer.launch({
     "--use-fake-ui-for-media-stream",
     "--use-fake-device-for-media-stream",
     "--autoplay-policy=no-user-gesture-required",
-    `--auto-select-desktop-capture-source=Entire screen`,
   ],
-  defaultViewport: { width: 1280, height: 860 },
+  defaultViewport: VIEWPORT,
 });
 
 let exitCode = 0;
@@ -217,6 +256,9 @@ try {
   } else {
     console.log("The customer window is open and sharing. Ctrl-C to end the session.");
     console.log("(Opening the URL above in a second browser starts the agent side of the same session.)");
+    console.log("Heads-up: this customer is headless, so what it shares is Chrome's synthetic capture");
+    console.log("pattern rather than a page. For a picture the agent can read, open");
+    console.log(`${BASE}/demo-app.html?sl-demo=0 in your own browser and share from there.`);
     for (;;) {
       await sleep(5000);
       const state = await page.evaluate(() => window.SupportLayer.getState()).catch(() => "closed");
