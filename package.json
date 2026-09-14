@@ -1,8 +1,8 @@
 {
   "name": "supportlayer",
-  "version": "1.0.0",
+  "version": "2.0.0",
   "private": true,
-  "description": "SupportLayer — zero-backend drop-in diagnostic and live P2P support widget (static site + two single-file deliverables). No runtime dependencies.",
+  "description": "SupportLayer — zero-backend drop-in diagnostic and live P2P support widget. One script, two roles: the same file serves the customer and the agent. No runtime dependencies.",
   "scripts": {
     "start": "node serve.js",
     "test": "node tests/e2e.mjs",

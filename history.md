@@ -226,3 +226,10 @@ that the suite clicks at measured viewport coordinates instead of via `elementHa
 and `/agent.html` still a 404. Then the identical 142 checks ran against
 `https://spuds0588.github.io/SupportLayer` — headless and headed — so the published artifact is the
 artifact that was tested.
+
+**A documented install path that 404s.** The integration guide's production advice was to "pin the
+CDN URL to a tag" and named `@v1.0.0`. The repository has never had a tag, so anyone following that
+line shipped a script tag that resolves to a 404 — and the same file's header says v2.0.0. The guide
+now recommends an immutable **commit SHA** (always valid, no release step) or a release tag once
+one exists, and states the current version explicitly. `package.json` was still on 1.0.0, so the
+three version sources (file header, `SupportLayer.version`, manifest) now agree at 2.0.0.

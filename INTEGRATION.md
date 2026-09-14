@@ -40,7 +40,10 @@ Put this immediately before `</body>`, once per page load:
     data-blur-selectors=".balance, .api-key, [data-sensitive]"></script>
 ```
 
-Pin a tag (`@v1.0.0`) rather than `@main` in production so an upstream push cannot change your site.
+Pin an **immutable ref** rather than `@main` in production, so an upstream push cannot change your site
+under you. Either a commit SHA
+(`@8e18b349cb623f85f7638ae55fff709c8e63b74d` — always valid, no release step) or a release tag once you
+create one (`@v2.0.0`). `@main` is fine for evaluation and for this demo site; it is not a pin.
 
 > **There is no separate agent page to deploy — on any hosting option.** The library ships one file
 > and both roles. What the agent opens is *your own page* with `?sl_role=agent&peer=<id>` appended,
@@ -473,10 +476,12 @@ Do not build these on top of the current version without agreeing to change the 
 ## 13. Versioning
 
 The current version is reported by `window.SupportLayer.version` and in the file header of
-`supportlayer.js`. Pin the CDN URL to a tag for production
-(`https://cdn.jsdelivr.net/gh/Spuds0588/SupportLayer@v1.0.0/supportlayer.js`) and read the
-[`history.md`](history.md) entry for a version before upgrading — it records the bug fixes so you can
-tell whether an upgrade affects you.
+`supportlayer.js` (currently **2.0.0** — the release that collapsed the two-page design into one
+script with two roles). Pin the CDN URL to a tag or commit SHA for production
+(`https://cdn.jsdelivr.net/gh/Spuds0588/SupportLayer@v2.0.0/supportlayer.js` once tagged, or an
+immutable SHA as shown in §5) and read the [`history.md`](history.md) entry for a version before
+upgrading — it records the behaviour changes and bug fixes so you can tell whether an upgrade
+affects you.
 
 If you fork the widget, keep `agents.md` next to it; it documents the invariants that are easy to
 break and expensive to debug.
