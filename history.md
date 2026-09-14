@@ -122,3 +122,60 @@ script; `data-live-base` still overrides everything.
 the jsDelivr URL and serves our own copy of `supportlayer.js` for it, so `script.src` is a CDN URL
 while the running code is the local build. A companion check asserts the self-hosted default. Green
 headless **and** headed, locally and against the live origin.
+
+## 2026-09-14 — Session 3: the vision correction (v2, one file, two roles)
+
+**The correction.** v1 shipped two deliverables: `supportlayer.js` for the customer and
+`agent.html` as a separate agent dashboard. The brief was narrower than that: the agent goes to
+**the same domain as the customer**, with parameters that select the support experience. So the
+second page was wrong — it duplicated an app shell that didn't exist, drifted from the widget,
+and needed its own hosting story. `agent.html` is now deleted (`git rm`).
+
+**One script, two roles.** `?sl_role=agent&peer=<id>` flips `CFG.role` and `mountAgent()` replaces
+the customer mount entirely. `liveSessionUrl(peerId)` is built by taking the customer's own
+`location.href` and setting those two params, so the agent link needs no route of its own and
+works on any page the host app already serves. A bare `role=` param is deliberately ignored —
+that name belongs to host apps for their own permissions. As a side effect the whole
+"CDNs serve `.html` as `text/plain`" class of bug disappears: there is no `.html` in the flow
+any more, so `defaultLiveBase()` went with the page it existed for.
+
+**The request panel becomes the session.** The four `data-mode` values now drive what the modal
+*is* after submit: an async report, a chat thread, or a call. `audio` and `video` were one-way in
+v1 (agent → user); both are now two-way, in the same surface.
+
+**The channel is the developer's decision.** A draft of this session added an in-session switcher
+so the customer could promote a chat to a call. That was reverted on review: the mode is
+hard-coded from `data-mode` at install time, and neither the customer nor the agent may change it
+mid-session. Noted in `agents.md` as a rule so it does not get re-added.
+
+**The agent's surface is a meeting, not a dashboard.** Full-bleed customer stage plus a floating
+bottom dock in the Zoom/Meet annotation idiom: **Point / Click / Draw** (+swatches, +Clear),
+**Chat**, **Report**, **End**. Point is the resting state — it moves a laser and clicks nothing,
+which is what makes it safe to leave armed. A coach line of shortcuts appears on connect, then
+fades, and returns when the dock is hovered. Nothing else is on screen: no session list, no
+metrics, no raw payload panes.
+
+**Two layout bugs, found by looking rather than by asserting.** The connect toast and the coach
+line both sat at ~92–96px from the bottom and the dock measured ~134px tall, so each was clipped
+behind it. The dock now publishes its measured height as `--sl-dock-h` and both sit above
+`calc(var(--sl-dock-h) + 12px)`, backed by a `ResizeObserver` because the dock wraps on narrow
+stages. The suite now asserts the geometry (toast and coach line clear the dock, dock above the
+stage floor, FAB inside the customer viewport) so the next CSS regression fails the build instead
+of surviving as a screenshot nobody reads.
+
+**A phantom.** A blue wash across the whole agent stage during a draw appeared in several captures
+and traced to nothing: selection was empty, the ink canvas was correct, and the colour
+(`rgb(50,102,208)`) exists nowhere in the source. It stopped reproducing once the preview host's
+renderer was restarted — an uncomposited 1290px layer inside a 550px iframe. Recorded so nobody
+chases it again.
+
+**Tests: 87 → 119.** New coverage for role isolation (`SupportLayer.agent` undefined for
+customers), "an unparameterised page is the customer role", "the host app's `role=` param is
+ignored", "there is no agent page to fetch", dock/stage geometry, and the same app running in both
+roles at once. Green headless **and** headed, locally and — after the Pages build — against the
+live origin.
+
+**Environment note.** Headed Chromium on this host composites poorly, which stalls Puppeteer's
+`elementHandle.click()` (it waits on `requestAnimationFrame`). The suite now clicks at measured
+viewport coordinates with `page.mouse`, which is both compositor-independent and closer to what a
+real user does.

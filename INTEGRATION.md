@@ -42,22 +42,21 @@ Put this immediately before `</body>`, once per page load:
 
 Pin a tag (`@v1.0.0`) rather than `@main` in production so an upstream push cannot change your site.
 
-> **The agent console cannot be served from a CDN.** Static-file CDNs return `.html` as
-> `text/plain`, so the browser would show the console as source code. When the widget is loaded from
-> jsDelivr/unpkg/raw.githubusercontent, it automatically points `live_session_url` at the project's
-> Pages console (`https://spuds0588.github.io/SupportLayer/agent.html`). If you host the console at
-> a URL of your own, set `data-live-base` explicitly. Both branches are covered by the test suite.
+> **There is no separate agent page to deploy — on any hosting option.** The library ships one file
+> and both roles. What the agent opens is *your own page* with `?sl_role=agent&peer=<id>` appended,
+> so CDN installs and self-hosted installs behave identically. Set `data-live-base` only if the agent
+> should land on a different route than the page the request came from.
 
 ### Option B — self-host (recommended for production)
 
-Copy **`supportlayer.js` and `agent.html`** into your static assets, keeping them in the same
-directory, and reference the local path:
+Copy **`supportlayer.js`** into your static assets and reference the local path:
 
 ```html
 <script src="/vendor/supportlayer.js" data-webhook="/api/support" data-mode="chat"></script>
 ```
 
-`agent.html` is found automatically as `agent.html` beside the script. No other configuration needed.
+That is the whole install. The agent's URL is derived from the customer's own `location.href`, so it
+works on every route your app already serves — nothing else to configure.
 
 ### Load it exactly once
 
@@ -95,14 +94,18 @@ media-src   'self' blob:
 | --- | --- | --- | --- |
 | `none` *(default)* | ✅ | ❌ | Async ticket only. Nothing peers, nothing signals. |
 | `chat` | ✅ | ✅ | Agent laser-click, draw, and directed typing. |
-| `audio` | ✅ | ✅ | `chat`, plus the agent's microphone streamed to the user. |
-| `video` | ✅ | ✅ | `chat`, plus the agent's camera. |
+| `audio` | ✅ | ✅ | `chat`, plus **two-way** audio: the agent's microphone to the user and the user's back. |
+| `video` | ✅ | ✅ | `chat`, plus **two-way** audio and video, both directions. |
+
+**The mode is the developer's decision and is fixed at install time.** There is deliberately no
+in-session channel switcher: the user cannot turn a chat into a call, and neither can the agent. Pick
+the mode per surface (a `none` marketing page, a `video` billing flow) and let it be.
 
 Screen sharing is **always** a separate explicit action ("Share my screen"). The snapshot at request
 time is the only thing captured by default — do not change that without a strong reason.
 
 If your app has no agent workflow yet, start with `mode="none"`. It is the whole product minus the
-live channel, and it needs no broker, no `agent.html`, and no CSP entry beyond your webhook.
+live channel, and it needs no broker and no CSP entry beyond your webhook.
 
 ---
 
@@ -122,7 +125,7 @@ must think about; the rest have working defaults.
 | `data-fields` | JSON | one `textarea` | The request form. See §4. |
 | `data-label` | text | `Get support` | Floating button label. |
 | `data-title` | text | `Report an issue` | Panel heading. |
-| `data-live-base` | URL | `agent.html` beside the script | Where the agent console lives; goes into `live_session_url`. |
+| `data-live-base` | URL | the customer's `location.href` | Base for the agent link; `sl_role=agent&peer=<id>` are appended to it. |
 | `data-peer-cdn` | URL | `https://unpkg.com/peerjs@1.5.5/dist/peerjs.min.js` | Swaps the PeerJS **library** source only. |
 | `data-demo` | `true` `false` | `false` | Simulated capture + loopback transport. See §10. |
 
@@ -196,7 +199,7 @@ pattern) if you need durability.
   "session_id": "uuid-1234-5678",
   "status": "open",
   "mode": "chat",
-  "live_session_url": "https://your-site.com/agent.html?peer=sl-ab12cd34",
+  "live_session_url": "https://your-site.com/checkout?sl_role=agent&peer=sl-ab12cd34",
   "snapshot": "data:image/jpeg;base64,/9j/4AAQSkZJRgABAQ...",
   "user_data": { "email": "jane@acme.com", "issue": "Checkout button is frozen." },
   "diagnostics": {
@@ -214,9 +217,9 @@ pattern) if you need durability.
 | `event_type` | `support_request` on first submit; `support_update` on resume, cancel, or completion. |
 | `session_id` | Stable across a session — use it to thread updates onto the original ticket. |
 | `status` | `open` \| `cancelled` \| `completed`. |
-| `live_session_url` | Open this in a browser to attach as the agent. `null` in `mode="none"`. |
+| `live_session_url` | Send this to an agent. Opening it loads your own page in the agent role. `null` in `mode="none"`. |
 | `snapshot` | One-frame 70% JPEG, max 1280px wide. **`null` if the user declined capture**, and never present on `support_update`. |
-| `diagnostics.window_geometry` | Lets the console map an *entire-screen* capture back onto the page. |
+| `diagnostics.window_geometry` | Lets the agent view map an *entire-screen* capture back onto the page. |
 
 Two HTTP calls are normal for one session (`support_request` then a `support_update` when it ends).
 Deduplicate on `session_id`.
@@ -352,21 +355,31 @@ automated media capture without a gesture is blocked by browsers. Do not try to 
 
 ---
 
-## 8. The agent console (`agent.html`)
+## 8. The agent experience
 
 Open the `live_session_url` from the webhook payload. That is the entire workflow: the payload is the
 only handshake the agent needs.
 
+The URL points at **the same page the customer is on**, with `?sl_role=agent&peer=<client-peer-id>`.
+The widget sees the role param and takes over the viewport instead of rendering the request button:
+the customer's live screen full-bleed, the chat transcript, and a floating tool dock. It is
+intentionally close to a video meeting — there is no dashboard, no session list, no analytics panel,
+and it does not need any route of its own.
+
 - The URL carries `?peer=<client-peer-id>`. The customer is the peer that *answers*; the agent
   initiates. Never reverse this — it would require the customer to know the agent's id.
-- Tools: **Laser click** (ripple, then a real `focus()` + `click()` on the element under the point),
-  **Draw** (interaction-blocking strokes that clear 3s after the agent stops), **Type** (outlines the
-  target, hands the text over in a copy/paste tooltip, and inserts it through the native value setter
-  so React/Vue register the change).
+- `?sl_role=agent` is the only role switch. A bare `role=` param is ignored on purpose, because host
+  apps use that name for their own permissions and the widget must not hijack it.
+- Tools, all in the bottom dock: **Point** (a laser ripple follows the cursor, nothing is clicked),
+  **Click** (ripple, then a real `focus()` + `click()` on the element under the point), **Draw**
+  (interaction-blocking strokes in the agent's swatch colour that fade a few seconds after the
+  strokes stop), **Type** (outlines the target, hands the text over in a copy/paste tooltip, and
+  inserts it through the native value setter so React/Vue register the change), plus **Chat**,
+  **Report** and **End**.
 - Requires `https://` for the agent's own camera/mic in `audio`/`video` modes. `chat` needs no
   media permission on either side beyond the customer's one-time snapshot.
 - Coordinates are **normalized `0.0`–`1.0`** of the customer's viewport. Pixels never cross the wire.
-  If you fork the console, keep that invariant and account for `object-fit: contain` letterboxing.
+  If you fork the agent view, keep that invariant and account for `object-fit: contain` letterboxing.
 
 Typical wiring: the webhook handler posts `live_session_url` into a Slack channel or a ticket
 comment, and an agent clicks it.
@@ -390,20 +403,24 @@ Do these in order; each one catches a distinct class of mistake.
    with `snapshot: null`. It must not throw or hang.
 5. **Teardown** — call `SupportLayer.removePrivacyBlur()` and confirm the page's markup is unchanged
    (`document.body.innerHTML` before vs after; the widget's own tree should be the only difference).
-6. **Round trip** — open the payload's `live_session_url` in a second browser. In `chat` mode, mode
-   the agent's pointer and confirm the laser lands on the element you hovered. Coordinate misalignment
-   is the most common fork regression.
-7. **Mobile** — repeat step 2 on a phone-sized viewport. The panel clamps itself to
+6. **Round trip** — open the payload's `live_session_url` in a second browser. It must load *your*
+   page with the agent dock over it, not a SupportLayer page. In `chat` mode, move the agent's pointer
+   and confirm the laser lands on the element you hovered; then confirm **Type** hands text to the
+   right field. Coordinate misalignment is the most common fork regression.
+7. **Mode is fixed** — confirm the customer's panel offers no way to switch between chat, audio and
+   video. Changing the channel must require editing `data-mode` and reloading.
+8. **Mobile** — repeat step 2 on a phone-sized viewport. The panel clamps itself to
    `min(384px, 100vw - 32px)` wide and `min(620px, 100vh - 120px)` tall, so it should never overflow;
    confirm the button stays reachable above your own fixed footers or cookie bars.
-8. **Console hygiene** — the page must log no `console.error` after a full session. Two `warn`
+9. **Console hygiene** — the page must log no `console.error` after a full session. Two `warn`
    messages are legitimate: the `data-fields` warning (only if your JSON is invalid) and a webhook
    delivery failure (only if the POST actually failed).
 
 Two live pages you can compare against: the
-[homepage demo](https://spuds0588.github.io/SupportLayer/) (real widget + real console, loopback
-transport) and the [integration harness](https://spuds0588.github.io/SupportLayer/test.html) (in-page
-assertions and a link into a real session).
+[homepage demo](https://spuds0588.github.io/SupportLayer/) (the real widget in both roles at once,
+over the loopback transport) and the
+[integration harness](https://spuds0588.github.io/SupportLayer/test.html) (in-page assertions and a
+link into a real session).
 
 ---
 

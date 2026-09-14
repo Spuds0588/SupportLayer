@@ -1,5 +1,18 @@
 # SupportLayer Master Dev Document
 
+> **AMENDMENT (v2, 2026-09-14) — read before acting on §2.1 or any `agent.html` reference below.**
+> The original brief called for a standalone agent dashboard (`agent.html`). The maintainer's
+> corrected vision is narrower: **the agent goes to the same domain as the user**, with URL
+> parameters selecting the support experience. There is therefore **one deliverable**,
+> `supportlayer.js`, and the agent role is that same script on the customer's own URL with
+> `?sl_role=agent&peer=<id>`. `agent.html` has been deleted; do not rebuild it.
+> The support agent sees a video-meeting-style surface — the customer's screen full-bleed plus a
+> floating bottom dock of annotation tools (**Point / Click / Draw / Clear**, **Chat**, **Report**,
+> **End**) — not a dashboard of panels and metrics. The request panel the user submits *becomes*
+> the session: chat, or a **two-way** audio/video call, as fixed by `data-mode` at install time
+> (never switchable in-session). See `agents.md` for the current architecture rules and
+> `INTEGRATION.md` for the current contract. Everything else in this document still applies.
+
 ## Part 1: Product Requirements Document (PRD)
 
 ### 1.1 Product Overview

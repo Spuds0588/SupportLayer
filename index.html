@@ -236,7 +236,7 @@
   <a href="#demo">Demo</a>
   <a href="#sisters">Layer family</a>
   <a href="#docs">Docs</a>
-  <a href="agent.html" target="_blank" rel="noopener">Agent console</a>
+  <a href="demo-app.html?sl_role=agent&amp;sl-demo=1" target="_blank" rel="noopener">Agent view</a>
   <a href="https://github.com/Spuds0588/SupportLayer" target="_blank" rel="noopener"><i class="fab fa-github"></i> GitHub</a>
 </div>
 
@@ -249,8 +249,9 @@
       </h1>
       <h2 class="subtitle">
         SupportLayer captures a one-frame snapshot, redacts the sensitive parts <em>before</em> capture, and POSTs the
-        report straight to your webhook. When a report isn't enough, the agent opens a live P2P screen session and can
-        point, draw, and hand over text — without a relay server, an S3 bucket, or a third-party SDK.
+        report straight to your webhook. When a report isn't enough, your support agent opens <em>the same URL</em> with
+        role parameters and lands in a full-screen console: the customer's screen, the chat, and a floating dock of
+        annotation tools — without a relay server, an S3 bucket, a third-party SDK, or a second app to maintain.
       </h2>
 
       <div class="code-box mb-6">
@@ -273,7 +274,7 @@
         <span class="sl-flow-arrow a-2">→</span>
         <span class="sl-flow-step st-3"><i class="fas fa-paper-plane"></i> POST to your webhook</span>
         <span class="sl-flow-arrow a-3">→</span>
-        <span class="sl-flow-step st-4"><i class="fas fa-link"></i> Agent opens <code>?peer=</code></span>
+        <span class="sl-flow-step st-4"><i class="fas fa-link"></i> Agent opens the same page <code>?sl_role=agent</code></span>
         <span class="sl-flow-arrow a-4">→</span>
         <span class="sl-flow-step st-5"><i class="fas fa-wand-magic-sparkles fa-magic"></i> Point · draw · hand over text</span>
       </div>
@@ -312,16 +313,17 @@
         <div class="box is-standard">
           <div class="feature-icon"><i class="fas fa-satellite-dish"></i></div>
           <h3 class="title is-5">Live P2P, no relay</h3>
-          <p>PeerJS opens a WebRTC data channel between the customer and the agent console. Your webhook only ever carries
-            the link — media never touches a server you have to pay for.</p>
+          <p>PeerJS opens a WebRTC data channel between the customer and the agent, who joins the customer's own page as
+            a role. Your webhook only ever carries the link — media never touches a server you have to pay for.</p>
         </div>
       </div>
       <div class="column is-4">
         <div class="box is-standard">
           <div class="feature-icon"><i class="fas fa-crosshairs"></i></div>
-          <h3 class="title is-5">Laser, glass-pane, directed typing</h3>
-          <p>The agent clicks land on the customer's real DOM. Drawing renders as interaction-blocking strokes that clear
-            after 3s. Typing highlights the field and hands the text over for review instead of faking keystrokes.</p>
+          <h3 class="title is-5">Point, draw, hand over text</h3>
+          <p>A floating tool dock sits over the shared screen, Zoom-style: <strong>Point</strong> spotlights, <strong>Click</strong>
+            lands on the customer's real DOM, <strong>Draw</strong> sketches strokes that clear after 3s, and <strong>Type</strong>
+            highlights a field and hands the text over for review instead of faking keystrokes.</p>
         </div>
       </div>
       <div class="column is-4">
@@ -341,10 +343,11 @@
     <div class="has-text-centered mb-6">
       <h2 class="title is-2 section-title">The simulated demo</h2>
       <p class="section-sub">
-        The checkout below is a real page running the real <code>supportlayer.js</code>. The agent console on the right is a
-        real dashboard talking over a real data channel. Only two things are simulated: the screen capture (a synthetic
-        frame instead of a permission prompt) and the transport (a same-origin loopback bus instead of PeerJS) — so the
-        whole flow runs with no backend, no network, and no share prompt.
+        Both frames below are <strong>the same page running the same <code>supportlayer.js</code></strong> — the left one is
+        the customer, the right one is a support agent who opened it with <code>?sl_role=agent</code>. That is the whole
+        architecture: no agent portal, no second app, no route to maintain. Only two things are simulated: the screen
+        capture (a synthetic frame instead of a permission prompt) and the transport (a same-origin loopback bus instead
+        of PeerJS) — so the whole flow runs with no backend, no network, and no share prompt.
       </p>
     </div>
 
@@ -373,10 +376,10 @@
         <div class="frame">
           <div class="frame-bar">
             <span class="dots"><i style="background:#ff5f57"></i><i style="background:#febc2e"></i><i style="background:#28c840"></i></span>
-            <span class="url">agent.html?peer=sl-…&amp;demo=1</span>
-            <span class="tag">Agent console · real commands</span>
+            <span class="url">checkout?sl_role=agent&amp;peer=sl-…</span>
+            <span class="tag">Agent · same page, agent role</span>
           </div>
-          <iframe class="agent" id="agent-frame" src="agent.html?demo=1" title="SupportLayer agent console (simulated feed)"></iframe>
+          <iframe class="agent" id="agent-frame" src="demo-app.html?sl_role=agent&amp;sl-demo=1" title="SupportLayer agent view — the same page in the agent role"></iframe>
         </div>
       </div>
       <div class="column is-6">
@@ -399,8 +402,9 @@
 //
 // 1. Hit "Break the checkout", then "Open the widget".
 // 2. Fill the form and submit — the snapshot and diagnostics land here.
-// 3. The agent console picks up the live link and dials in over the loopback bus.
-// 4. Point, draw, or hand over text from the console and watch the checkout react.</pre>
+//    The panel then becomes the chat / video call for both sides.
+// 3. The agent pane is the same page with ?sl_role=agent — it picks up the live link over the loopback bus.
+// 4. Chat, point, draw, or hand over text from the agent pane and watch the checkout react.</pre>
             <div class="snapshot-row">
               <img id="snapshot-img" alt="Captured snapshot">
               <span class="meta" id="snapshot-meta">snapshot: none captured</span>
@@ -416,7 +420,8 @@
           <li>Click <strong>Break the checkout</strong> so the failure is genuine — the payment gateway times out on purpose.</li>
           <li>Open the widget (or the floating button inside the frame), fill the form, and submit. Coordinates, request and snapshot are redacted locally first.</li>
           <li>Watch the inspector: the payload below is exactly what would have been POSTed to your webhook, including the redacted snapshot.</li>
-          <li>The agent console connects automatically. Click the feed to laser-point (a real DOM click fires), switch to <strong>Draw</strong>, or type text and click a field to hand it over.</li>
+          <li>The agent pane on the right is the same page with <code>?sl_role=agent</code>: it connects by itself and turns into a full-screen view of the customer's screen with a floating tool dock.</li>
+          <li>Pick <strong>Point</strong> and click the customer's screen in the agent pane to spotlight it, switch to <strong>Draw</strong> to sketch (a real DOM click fires in Click mode), or type text and click a field to hand it over. Both panes share the same chat.</li>
           <li>Hit <strong>Simulate a page reload</strong>: <code>localStorage</code> brings the session back as a resume prompt instead of a silent drop.</li>
         </ol>
       </div>
@@ -517,6 +522,23 @@
       </div>
       <div class="column is-5">
         <div class="box is-standard">
+          <h3 class="title is-5">The agent role</h3>
+          <p>Your webhook receives a URL that is the customer's page plus two parameters. Open it and the same script
+            becomes the support console — the request button is replaced by the customer's screen, the chat, and the tool dock.</p>
+          <pre class="pre"><code><span class="c">// what live_session_url looks like</span>
+https://app.domain.com/checkout
+   ?sl_role=agent&amp;peer=sl-7f3a91</code></pre>
+          <p class="mt-3 is-size-7" style="color:#8b93a7">Nothing else is required — no separate portal, no extra
+            deployment. Whatever auth protects <code>/checkout</code> protects the console too, so agents sign in like any
+            other user. Options: <code>data-live-base</code> to point the link at a different page,
+            <code>sl_mode</code> / <code>sl_color</code> to force a call mode or annotation colour.</p>
+        </div>
+      </div>
+    </div>
+
+    <div class="columns is-variable is-5">
+      <div class="column is-7">
+        <div class="box is-standard">
           <h3 class="title is-5">Headless API</h3>
           <p>Set <code>data-headless="true"</code> to hide the floating button and drive everything from your own UI:</p>
           <pre class="pre"><code>SupportLayer.requestHelp();
@@ -550,6 +572,8 @@ SupportLayer.reset();
               <tr><td><code>data-blur-regex</code></td><td>pattern list</td><td>Text nodes wrapped in a blurred span</td></tr>
               <tr><td><code>data-fields</code></td><td>JSON</td><td>Dynamic request form</td></tr>
               <tr><td><code>data-demo</code></td><td>true · false</td><td>Simulated capture + loopback transport</td></tr>
+              <tr><td><code>?sl_role=agent</code></td><td>query param or <code>data-role</code></td><td>Boot into the agent view on this same page</td></tr>
+              <tr><td><code>?peer=</code></td><td>peer id</td><td>Which customer the agent should dial</td></tr>
             </tbody>
           </table>
         </div>
@@ -562,7 +586,7 @@ SupportLayer.reset();
   <span class="p">"session_id"</span>: <span class="c">"uuid-1234-5678"</span>,
   <span class="p">"status"</span>:     <span class="c">"open | cancelled | completed"</span>,
   <span class="p">"mode"</span>:       <span class="c">"chat"</span>,
-  <span class="p">"live_session_url"</span>: <span class="c">"agent.html?peer=sl-…"</span>,
+  <span class="p">"live_session_url"</span>: <span class="c">"/checkout?sl_role=agent&amp;peer=sl-…"</span>,
   <span class="p">"snapshot"</span>:   <span class="c">"data:image/jpeg;base64,…"</span>,
   <span class="p">"user_data"</span>:  { <span class="p">"name"</span>: <span class="c">"Jane"</span>, <span class="p">"issue"</span>: <span class="c">"…"</span> },
   <span class="p">"diagnostics"</span>: {
@@ -574,7 +598,7 @@ SupportLayer.reset();
   }
 }</code></pre>
           <p class="mt-4 is-size-7" style="color:#8b93a7"><code>snapshot</code> is <code>null</code> when the user declines
-            the prompt or on <code>support_update</code> events. <code>window_geometry</code> lets the agent console map an
+            the prompt or on <code>support_update</code> events. <code>window_geometry</code> lets the agent view map an
             entire-screen capture back onto the page.</p>
         </div>
       </div>
@@ -583,14 +607,16 @@ SupportLayer.reset();
     <div class="box is-standard mt-5">
       <h3 class="title is-5">Coordinate contract (read this before touching the overlay code)</h3>
       <p>Every coordinate that travels over the data channel is normalized to <code>0.0 – 1.0</code> of the customer's
-        viewport. Pixels never cross the wire. The agent console normalizes against the <em>rendered</em> video geometry —
+        viewport. Pixels never cross the wire. The agent view normalizes against the <em>rendered</em> video geometry —
         computing the <code>object-fit: contain</code> letterbox offset first — and, when the customer shared an entire
         screen rather than a tab, offsets by the customer's reported window position and size. Get that wrong and clicks
         drift by exactly the letterbox margin, which is why it is spelled out here.</p>
-      <p class="mt-3">The agent opens <code>agent.html?peer=&lt;client-peer-id&gt;</code> — the customer is the callee, so
-        the link your webhook carries is the only thing the agent needs. Screen sharing stays opt-in: the widget posts a
-        momentary snapshot at request time and never holds a capture stream open unless the user clicks
-        <strong>Share my screen</strong>.</p>
+      <p class="mt-3"><code>live_session_url</code> is the customer's <em>own page</em> with <code>?sl_role=agent&amp;peer=&lt;id&gt;</code>
+        glued on. The agent opens it (signed into your app like any other user) and the widget boots into the agent view
+        instead of the request button — the customer is the callee, so that link is the only thing the agent needs. The
+        customer's own tab meanwhile turns the request panel into the chat / audio / video call, both directions.
+        Screen sharing stays opt-in: the widget posts a momentary snapshot at request time and never holds a capture
+        stream open unless the user clicks <strong>Share my screen</strong>.</p>
     </div>
   </div>
 </section>
@@ -601,7 +627,7 @@ SupportLayer.reset();
     <div class="links mb-5">
       <a href="https://github.com/Spuds0588/SupportLayer" class="mx-3" target="_blank" rel="noopener">GitHub</a>
       <a href="#demo" class="mx-3">Simulated demo</a>
-      <a href="agent.html" class="mx-3">Agent console</a>
+      <a href="demo-app.html?sl_role=agent&amp;sl-demo=1" class="mx-3" target="_blank" rel="noopener">Agent view</a>
       <a href="test.html" class="mx-3">Test harness</a>
       <a href="https://github.com/Spuds0588/SupportLayer/blob/main/INTEGRATION.md" class="mx-3" target="_blank" rel="noopener">Integration guide</a>
       <a href="https://spuds0588.github.io/MailLayer-Embedded/" class="mx-3" target="_blank" rel="noopener">MailLayer</a>
@@ -753,6 +779,8 @@ SupportLayer.reset();
   /* --- payloads arrive through the demo app's postMessage bridge --- */
   window.addEventListener("message", function (e) {
     var data = e.data || {};
+    // The agent pane is the same page, so it emits the same events — ignore them.
+    if (data.role === "agent") return;
     if (data.type === "sl-webhook" && data.payload) {
       events.unshift({ payload: data.payload, size: JSON.stringify(data.payload).length, at: new Date() });
       if (events.length > 12) events.pop();
@@ -868,8 +896,8 @@ SupportLayer.reset();
     }
     try {
       var a = agentFrame.contentWindow;
-      if (a && a.__AgentConsole) {
-        var s = a.__AgentConsole.state();
+      if (a && a.SupportLayer && a.SupportLayer.agent) {
+        var s = a.SupportLayer.agent.state();
         setChip(chipAgent, s.connected ? "connected" : "listening", s.connected);
       }
     } catch (e) { /* ignore */ }

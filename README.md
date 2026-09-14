@@ -3,22 +3,23 @@
 **SupportLayer is a zero-backend, drop-in diagnostic and live P2P support widget for web applications.**
 Add one `<script>` tag and your users get an immediate bug-report path that POSTs rich diagnostics — including a
 redacted, one-frame snapshot — straight to the webhook you already have (Slack, Zendesk, Zapier, your own API).
-When a report isn't enough, an agent opens a live peer-to-peer screen session and can point at things, draw on the
-user's screen, and hand text over for review.
+When a report isn't enough, the agent joins the *same page* over a live peer-to-peer session and can point at
+things, draw on the user's screen, and hand text over for review.
 
-No middleware, no S3 bucket, no WebSocket relay, no SDK, no build step. Three files do the work.
+No middleware, no S3 bucket, no WebSocket relay, no SDK, no build step. Two files do the work — `supportlayer.js`
+is the whole product, and the agent experience is that same script running in a different role.
 
 ## ▶ [**Open the live homepage and try the demo →**](https://spuds0588.github.io/SupportLayer/)
 
-The homepage runs the **real widget and the real agent console side by side** — file a report, watch the
-redaction pass, see the webhook payload, then drive the agent's laser/draw/type tools onto the customer page.
+The homepage runs the **real widget in both roles at once** — the customer files a report and watches the
+redaction pass, then the agent joins the same page as a second frame and drives the laser/draw/type tools onto it.
 No backend, no signup, no install.
 
 | | |
 | --- | --- |
 | 🏠 **Homepage + simulated demo** | **[spuds0588.github.io/SupportLayer](https://spuds0588.github.io/SupportLayer/)** |
 | 🧪 **Integration harness** | [spuds0588.github.io/SupportLayer/test.html](https://spuds0588.github.io/SupportLayer/test.html) |
-| 🎧 **Agent console** | [spuds0588.github.io/SupportLayer/agent.html](https://spuds0588.github.io/SupportLayer/agent.html) |
+| 🎧 **Agent experience** | The customer's own URL + `?sl_role=agent&peer=<id>` — same page, no second app |
 | 📘 **Integration guide** | [INTEGRATION.md](https://github.com/Spuds0588/SupportLayer/blob/main/INTEGRATION.md) — wiring it into your app, for humans and coding agents |
 
 ## Quick start
@@ -37,10 +38,9 @@ No backend, no signup, no install.
     ]'></script>
 ```
 
-Self-host it by dropping `supportlayer.js` and `agent.html` next to your app — the widget derives the agent URL from
-its own script location, so nothing else needs configuring. Loaded from a CDN, it points `live_session_url` at this
-project's Pages console instead: static-file CDNs serve `.html` as `text/plain`, so the console would otherwise open
-as source code. `data-live-base` overrides either way.
+Self-hosting is a single file: drop `supportlayer.js` next to your app. The agent needs no second page — the
+`live_session_url` in the payload is *your own page* with `?sl_role=agent&peer=<id>` appended, so it works on any
+route your app already serves. `data-live-base` overrides the base when the agent should land somewhere else.
 
 **New to this? Read [INTEGRATION.md](https://github.com/Spuds0588/SupportLayer/blob/main/INTEGRATION.md).** It is written to be followed step by step by a human
 integrator *or* an AI coding agent: delivery options, the full attribute table, framework recipes
@@ -49,12 +49,15 @@ preflight your endpoint must answer, CSP and HTTPS requirements, and a post-inte
 
 ### Modes
 
+The developer picks the channel once, at install time; the user never switches it mid-session. What the customer sees
+inside the request panel is the same component in all four modes — it just becomes a chat thread, or a call.
+
 | `data-mode` | What happens |
 | --- | --- |
 | `none` | Async bug report only. One-frame JPEG snapshot + diagnostics → webhook. No live channel. |
 | `chat` | Everything above, plus a PeerJS data channel so an agent can laser-click, draw, and hand over text. |
-| `audio` | Chat, plus the agent's microphone streamed back to the user. |
-| `video` | Chat, plus the agent's camera. |
+| `audio` | Chat, plus **two-way** audio — the agent's microphone to the user *and* the user's microphone back. |
+| `video` | Chat, plus **two-way** audio and video in both directions. |
 
 Screen sharing is always a separate, explicit action (`Share my screen`), so the snapshot at request time is the only
 thing captured by default.
@@ -71,7 +74,7 @@ thing captured by default.
 | `data-blur-regex` | pattern list | Text nodes matching any pattern are wrapped in a blurred span. |
 | `data-fields` | JSON | Dynamic request form. Invalid JSON falls back to a single textarea and warns. |
 | `data-demo` | `true` `false` | Simulated capture + loopback transport (used by the landing-page demo). |
-| `data-live-base` | URL | Override the agent console URL. Defaults to `agent.html` next to the script. |
+| `data-live-base` | URL | Override the agent link's base. Defaults to the customer's current `location.href`. |
 | `data-peer-cdn` | URL | Override where the PeerJS *library* is fetched from (not the signalling server). |
 | `data-label` | text | FAB button label. Default `Get support`. |
 | `data-title` | text | Panel heading. Default `Report an issue`. |
@@ -102,7 +105,7 @@ that is about to be sent — it is what powers the payload inspector in the demo
   "session_id": "uuid-1234-5678",
   "status": "open",
   "mode": "chat",
-  "live_session_url": "https://your-site.com/agent.html?peer=sl-ab12cd34",
+  "live_session_url": "https://your-site.com/checkout?sl_role=agent&peer=sl-ab12cd34",
   "snapshot": "data:image/jpeg;base64,/9j/4AAQSkZJRgABAQ...",
   "user_data": { "name": "Jane Doe", "issue": "The checkout button is frozen." },
   "diagnostics": {
@@ -117,7 +120,10 @@ that is about to be sent — it is what powers the payload inspector in the demo
 
 `event_type` is `support_request` on the first submit and `support_update` on resume, cancellation, or completion.
 `snapshot` is `null` when the user declines the capture prompt, and is never attached to `support_update`.
-`window_geometry` lets the agent console map an *entire screen* capture back onto the page.
+`window_geometry` lets the agent view map an *entire screen* capture back onto the page.
+
+`live_session_url` is the only thing the agent needs: send it to a human (or a queue) and opening it puts that
+browser on your own page in the agent role.
 
 ## Privacy model
 
@@ -128,18 +134,26 @@ that is about to be sent — it is what powers the payload inspector in the demo
    original markup when a session ends.
 4. The widget UI lives in a Shadow DOM, so no host stylesheet can restyle it and no page script can read it.
 
-## Agent console
+## The agent experience
 
-Open `agent.html?peer=<client-peer-id>` — the id comes from `live_session_url` in the payload. The customer is the
-callee, so the webhook is the only thing the agent needs.
+Send the agent the `live_session_url` from the payload. Opening it loads **the same page the customer is on**,
+with `?sl_role=agent&peer=<client-peer-id>` in the URL, and the widget takes over the viewport instead of showing
+the request button: the customer's screen full-bleed, the chat transcript, and a floating dock of tools. It reads
+like a video meeting built for support — no dashboards, no extra panels, no analytics chrome.
+
+The dock is the whole interface, and it stays out of the way until used:
 
 | Tool | Behaviour on the customer's page |
 | --- | --- |
-| **Laser click** | Visual ripple at the point, then a real `focus()` + `click()` on the element under it. |
-| **Draw** | Interaction-blocking canvas strokes that clear 3 seconds after the agent stops drawing. |
+| **Point** | A laser ripple follows the agent's cursor. Nothing is clicked. |
+| **Click** | Visual ripple at the point, then a real `focus()` + `click()` on the element under it. |
+| **Draw** | Interaction-blocking canvas strokes in the agent's swatch colour that fade a few seconds after the strokes stop. |
 | **Type** | The field is outlined, the text is handed over in a copy/paste tooltip, and (when the field is a plain input) inserted through the native value setter so React/Vue actually register it. |
+| **Chat / Report / End** | Toggle the transcript, re-read the diagnostics the customer submitted, or close the session for them. |
 
-Coordinates are **always normalized `0.0 – 1.0`** of the customer's viewport. The console computes the
+A coach line listing the shortcuts appears on connect and then fades; hovering the dock brings it back.
+
+Coordinates are **always normalized `0.0 – 1.0`** of the customer's viewport. The agent view computes the
 `object-fit: contain` letterbox offset before normalizing, and offsets whole-screen captures by the customer's
 reported window geometry. Pixels never cross the wire.
 
@@ -149,23 +163,24 @@ reported window geometry. Pixels never cross the wire.
 npm start            # zero-dependency static server on http://127.0.0.1:4174
 npm test             # headless Chromium end-to-end suite
 npm run test:headed  # same suite with a visible window (real rendering + input)
-npm run test:live    # the same 84 checks against the deployed GitHub Pages site
+npm run test:live    # the same 119 checks against the deployed GitHub Pages site
 ```
 
 The suite boots the server itself, drives the simulated demo end to end (request → redaction → webhook payload →
-agent connect → laser/draw/type → reload/resume → teardown), runs the in-page assertions in `test.html`, and fails on
-any console error, uncaught exception, or broken same-origin request.
+customer and agent frames joining the same page → chat → laser/draw/type → reload/resume → teardown), runs the
+in-page assertions in `test.html`, and fails on any console error, uncaught exception, or broken same-origin request.
+It also asserts layout invariants — the FAB inside the customer viewport, the agent dock above the stage floor,
+toast and coach line clearing the dock — so a CSS regression fails the build instead of surviving as a bad screenshot.
 
 `test:live` passes `--base <url>` (equivalently `SL_BASE`) so the identical suite runs against a deployed origin —
-the same 84 checks pass against `https://spuds0588.github.io/SupportLayer/`, which is how the published page is
+the same 119 checks pass against `https://spuds0588.github.io/SupportLayer/`, which is how the published page is
 verified rather than assumed.
 
 ## Repository layout
 
 | File | Role |
 | --- | --- |
-| `supportlayer.js` | The product. Vanilla JS IIFE, one global, zero dependencies. |
-| `agent.html` | The agent console. Single self-contained file. |
+| `supportlayer.js` | The product — both roles. Vanilla JS IIFE, one global, zero dependencies. |
 | `index.html` | Landing page + simulated demo (customer frame, agent frame, payload inspector). |
 | `demo-app.html` | The simulated customer app used inside the demo frame. |
 | `test.html` | Integration harness with in-page assertions. |

@@ -5,8 +5,8 @@
  *   node tests/e2e.mjs --headed   # visible window, real rendering + real mouse input
  *
  * Boots serve.js on a free port, drives index.html's simulated demo (customer frame +
- * agent console frame + webhook inspector) and test.html's in-page assertions, then
- * reports every failure with the reason instead of stopping at the first one.
+ * the SAME page in the agent role + webhook inspector) and test.html's in-page assertions,
+ * then reports every failure with the reason instead of stopping at the first one.
  */
 import { spawn } from "node:child_process";
 import { existsSync, mkdirSync, readFileSync } from "node:fs";
@@ -100,35 +100,67 @@ function watch(page, tag) {
   page.on("requestfailed", (req) => failedRequests.push({ tag, url: req.url(), err: req.failure()?.errorText }));
 }
 
-async function frameOf(page, name) {
-  for (const f of page.frames()) {
-    if (f.name() === name) return f;
-  }
-  return page.frames().find((f) => f.url().includes(name));
+/**
+ * Trusted clicks are dispatched through the mouse at measured coordinates rather than
+ * via `elementHandle.click()`. Two reasons: the coordinates work across frames (puppeteer
+ * reports iframe elements in main-frame space), and it does not depend on
+ * `scrollIntoViewIfNeeded`, which stalls on displays that composite slowly (rAF barely
+ * fires on this host, and the headed run would otherwise time out on the first click).
+ */
+async function clickBox(page, box) {
+  await page.mouse.click(Math.round(box.x + box.width / 2), Math.round(box.y + box.height / 2));
 }
 
-/** Click a real element inside the widget's shadow DOM with a trusted mouse event. */
-async function trustedShadowClick(frame, innerSelector, hostSelector = "#supportlayer-root") {
+/** Measure an element, shadow-DOM or not, inside `frame` (main-frame viewport coords). */
+async function boxIn(frame, selector, { shadow = true } = {}) {
   const handle = await frame.evaluateHandle(
-    (host, sel) => {
-      const root = document.querySelector(host);
-      return root && root.shadowRoot ? root.shadowRoot.querySelector(sel) : null;
+    (sel, useShadow) => {
+      const scope = useShadow ? document.querySelector("#supportlayer-root") : document;
+      const root = useShadow ? scope && scope.shadowRoot : scope;
+      return root ? root.querySelector(sel) : null;
     },
-    hostSelector,
-    innerSelector
+    selector,
+    shadow
   );
   const element = handle.asElement();
-  if (!element) {
-    fail(`shadow element not found: ${innerSelector}`);
+  return element ? element.boundingBox() : null;
+}
+
+/** Instant scroll (the landing page sets `scroll-behavior: smooth`, which races clicks). */
+async function shownInViewport(page, selector) {
+  await page.evaluate((sel) => {
+    const el = document.querySelector(sel);
+    if (!el) return;
+    const rect = el.getBoundingClientRect();
+    const top = window.scrollY + rect.top - Math.max(0, (window.innerHeight - rect.height) / 2);
+    window.scrollTo({ top: Math.max(0, top), left: 0, behavior: "instant" });
+  }, selector);
+  await sleep(120);
+}
+
+/** Click an element inside a frame's shadow DOM (or its document) with real mouse input. */
+async function clickIn(page, frame, selector, { shadow = true, frameSelector } = {}) {
+  if (frameSelector) await shownInViewport(page, frameSelector);
+  const box = await boxIn(frame, selector, { shadow });
+  if (!box) {
+    fail(`target not found or not laid out: ${selector}`);
     return false;
   }
-  try {
-    await element.click();
-    return true;
-  } catch (e) {
-    fail(`could not click ${innerSelector}`, e.message);
+  await clickBox(page, box);
+  return true;
+}
+
+/** Click a plain element on the page itself. */
+async function clickSelector(page, selector) {
+  await shownInViewport(page, selector);
+  const handle = await page.$(selector);
+  const box = handle ? await handle.boundingBox() : null;
+  if (!box) {
+    fail(`target not found or not laid out: ${selector}`);
     return false;
   }
+  await clickBox(page, box);
+  return true;
 }
 
 /* ------------------------------------------------------------------ *
@@ -193,10 +225,11 @@ async function main() {
 
     group("landing page");
     check("page title mentions SupportLayer", (await page.title()).includes("SupportLayer"));
-    const customerFrame = await page.waitForFrame((f) => f.url().includes("demo-app.html"), { timeout: 10000 });
-    const agentFrame = await page.waitForFrame((f) => f.url().includes("agent.html"), { timeout: 10000 });
+    const customerFrame = await page.waitForFrame((f) => f.url().includes("demo-app.html") && !f.url().includes("sl_role"), { timeout: 10000 });
+    const agentFrame = await page.waitForFrame((f) => f.url().includes("sl_role=agent"), { timeout: 10000 });
     check("customer demo frame loaded", !!customerFrame);
-    check("agent console frame loaded", !!agentFrame);
+    check("agent frame is the same page in the agent role", !!agentFrame);
+    check("both frames are the same document, not a second app", customerFrame.url().split("?")[0] === agentFrame.url().split("?")[0]);
 
     const widgetReady = await waitFor(() => customerFrame.evaluate(() => !!(window.SupportLayer && window.SupportLayer.config)));
     check("widget booted inside the customer frame", widgetReady);
@@ -206,23 +239,49 @@ async function main() {
       return { mode: c.mode, demo: c.demo, theme: c.theme, fields: c.fields.length, webhook: c.webhook, headless: c.headless };
     });
     eq("demo mode is active", cfg.demo, true);
-    eq("mode parsed from the script tag", cfg.mode, "chat");
+    eq("mode parsed from the script tag", cfg.mode, "video");
+    eq("customer pane reports the user role", await customerFrame.evaluate(() => window.SupportLayer.role), "user");
     eq("theme parsed from the script tag", cfg.theme, "#14b8a6");
     eq("three form fields parsed from JSON", cfg.fields, 3);
     eq("webhook URL parsed", cfg.webhook, "https://hooks.example.com/supportlayer/demo");
     eq("customer starts IDLE", await customerFrame.evaluate(() => window.SupportLayer.getState()), "IDLE");
 
     const agentSeam = await agentFrame.evaluate(() => {
-      const s = window.__AgentConsole && window.__AgentConsole.state();
-      return s ? { demo: s.demo, connected: s.connected } : null;
+      const a = window.SupportLayer && window.SupportLayer.agent;
+      const s = a && a.state();
+      return s ? { demo: s.demo, connected: s.connected, tool: s.tool, role: window.SupportLayer.role } : null;
     });
-    check("agent console exposes its test seam", !!agentSeam);
+    check("agent role exposes its test seam", !!agentSeam);
+    eq("the agent frame runs the widget in the agent role", agentSeam?.role, "agent");
     eq("agent console is in demo mode", agentSeam?.demo, true);
     eq("agent console starts disconnected", agentSeam?.connected, false);
+    eq("the default tool is point, not a destructive click", agentSeam?.tool, "point");
+
+    const agentShell = await agentFrame.evaluate(() => {
+      const root = document.querySelector("#supportlayer-root").shadowRoot;
+      const stage = root.querySelector(".sl-stage");
+      const dock = root.querySelector(".sl-dock");
+      const tools = Array.prototype.map.call(root.querySelectorAll(".sl-tool[data-tool]"), (b) => b.getAttribute("data-tool"));
+      const rect = dock ? dock.getBoundingClientRect() : null;
+      return {
+        hasStage: !!stage,
+        tools,
+        hasChat: !!root.querySelector(".sl-card"),
+        fabHidden: !root.querySelector(".sl-fab"),
+        emptyShown: !root.querySelector(".sl-stage-empty").hidden,
+        dockBottom: rect ? Math.round(window.innerHeight - rect.bottom) : null,
+        dockFloats: rect ? getComputedStyle(dock).position : null,
+      };
+    });
+    check("the agent gets a full-screen stage", agentShell.hasStage);
+    eq("the tool dock offers point · click · draw · type", agentShell.tools.join(","), "point,click,draw,type");
+    check("the dock is a floating bar pinned to the bottom", agentShell.dockFloats === "absolute" && agentShell.dockBottom < 40, JSON.stringify(agentShell));
+    check("the agent never sees the customer request button", agentShell.fabHidden);
+    check("the agent waits with an explicit empty state", agentShell.emptyShown);
 
     /* ---------- open the widget ---------- */
     group("request flow");
-    await page.click("#btn-widget");
+    await clickSelector(page, "#btn-widget");
     const panelOpen = await waitFor(() =>
       customerFrame.evaluate(() => {
         const root = document.querySelector("#supportlayer-root");
@@ -234,16 +293,10 @@ async function main() {
     check("widget UI lives in a shadow root", await customerFrame.evaluate(() => !!document.querySelector("#supportlayer-root").shadowRoot));
 
     /* ---------- fill and submit with trusted input ---------- */
-    const shadowHandle = (selector) =>
-      customerFrame.evaluateHandle(
-        (sel) => document.querySelector("#supportlayer-root").shadowRoot.querySelector(sel),
-        selector
-      );
-    const nameHandle = await shadowHandle("#sl-field-name");
-    await nameHandle.asElement().click();
+    await shownInViewport(page, "#customer-frame");
+    await clickIn(page, customerFrame, "#sl-field-name");
     await page.keyboard.type("Jane Doe");
-    const issueHandle = await shadowHandle("#sl-field-issue");
-    await issueHandle.asElement().click();
+    await clickIn(page, customerFrame, "#sl-field-issue");
     await page.keyboard.type("The Complete purchase button spins forever.");
 
     const typed = await customerFrame.evaluate(() => {
@@ -253,10 +306,9 @@ async function main() {
     eq("typed into the shadow form (real keyboard)", typed.name, "Jane Doe");
     check("textarea captured the issue", typed.issue.includes("spins forever"));
 
-    const submitBtn = await shadowHandle("button[type=submit]");
-    const submitBox = await submitBtn.asElement().boundingBox();
+    const submitBox = await boxIn(customerFrame, "button[type=submit]");
     check("submit button is inside the visible frame", !!submitBox && submitBox.width > 10, JSON.stringify(submitBox));
-    await submitBtn.asElement().click();
+    await clickIn(page, customerFrame, "button[type=submit]");
 
     const delivered = await waitFor(async () => {
       const chip = await page.$eval("#chip-events b", (el) => Number(el.textContent));
@@ -271,12 +323,16 @@ async function main() {
     });
     eq("event_type is support_request", payload.parsed.event_type, "support_request");
     eq("status is open", payload.parsed.status, "open");
-    eq("mode carried into the payload", payload.parsed.mode, "chat");
+    eq("mode carried into the payload", payload.parsed.mode, "video");
     eq("user_data carries the typed answers", payload.parsed.user_data.name, "Jane Doe");
     check("session_id looks like a uuid", /^[0-9a-f-]{20,}$/.test(payload.parsed.session_id), payload.parsed.session_id);
     check("diagnostics carry the frame viewport", /^\d+x\d+$/.test(payload.parsed.diagnostics.viewport), payload.parsed.diagnostics.viewport);
     check("diagnostics carry url + browser + timestamp", !!(payload.parsed.diagnostics.url && payload.parsed.diagnostics.browser && payload.parsed.diagnostics.timestamp));
-    check("live_session_url points at agent.html with a peer id", /agent\.html\?peer=sl-/.test(payload.parsed.live_session_url || ""), payload.parsed.live_session_url);
+    check(
+      "live_session_url is the customer's own page with the agent role",
+      /demo-app\.html\?sl_role=agent&peer=sl-/.test(payload.parsed.live_session_url || ""),
+      payload.parsed.live_session_url
+    );
     check("snapshot is a JPEG data URL", payload.snapshotSrc.startsWith("data:image/jpeg"), payload.snapshotSrc);
     check("snapshot preview is shown in the inspector", payload.snapshotVisible);
 
@@ -308,15 +364,117 @@ async function main() {
     /* ---------- agent connects over the loopback bus ---------- */
     group("live session");
     const connected = await waitFor(async () => (await page.$eval("#chip-agent b", (el) => el.textContent)) === "connected", { timeout: 12000 });
-    check("agent console joined the session", connected);
-    const customerState = await customerFrame.evaluate(() => window.SupportLayer.getState());
-    eq("customer state is CONNECTED", customerState, "CONNECTED");
-    const agentKnowsClient = await agentFrame.evaluate(() => {
-      const s = window.__AgentConsole.state();
-      return { url: s.client && s.client.url, mode: s.client && s.client.mode, viewport: s.client && s.client.viewport };
+    check("the agent joined the session on its own", connected);
+    const customerConnected = await waitFor(() => customerFrame.evaluate(() => window.SupportLayer.getState() === "CONNECTED"), { timeout: 8000 });
+    check("customer state is CONNECTED", customerConnected, await customerFrame.evaluate(() => window.SupportLayer.getState()));
+    const agentKnowsClient = await waitFor(
+      () =>
+        agentFrame.evaluate(() => {
+          const s = window.SupportLayer.agent.state();
+          return s.client && s.client.url ? { url: s.client.url, mode: s.client.mode, viewport: s.client.viewport } : false;
+        }),
+      { timeout: 8000 }
+    );
+    check("agent received the client metadata handshake", !!agentKnowsClient && !!agentKnowsClient.url, JSON.stringify(agentKnowsClient));
+    eq("agent knows the client mode", agentKnowsClient && agentKnowsClient.mode, "video");
+
+    const stageLive = await waitFor(
+      () => agentFrame.evaluate(() => window.SupportLayer.agent.state().feed)
+    );
+    check("the customer's screen feed reached the agent stage", stageLive);
+
+    const customerPanel = await customerFrame.evaluate(() => {
+      const root = document.querySelector("#supportlayer-root").shadowRoot;
+      const live = root.querySelector('.sl-view[data-view=live]');
+      return {
+        active: live.classList.contains("sl-active"),
+        formGone: !live.parentElement.querySelector('.sl-view[data-view=form].sl-active'),
+        hasComposer: !!live.querySelector(".sl-composer input"),
+        hasTranscript: !!live.querySelector(".sl-transcript"),
+        actions: Array.prototype.map.call(live.querySelectorAll(".sl-call-bar button"), (b) => b.textContent.trim()),
+        screenOn: live.querySelector('[data-act=screen]').textContent.includes("Stop"),
+      };
     });
-    check("agent received the client metadata handshake", !!agentKnowsClient.url, JSON.stringify(agentKnowsClient));
-    eq("agent knows the client mode", agentKnowsClient.mode, "chat");
+    check("the request panel became the live session panel", customerPanel.active && customerPanel.formGone, JSON.stringify(customerPanel));
+    check("the live panel is a chat (transcript + composer)", customerPanel.hasComposer && customerPanel.hasTranscript);
+    check("video sessions expose call controls", customerPanel.actions.join("|").includes("Mute"), customerPanel.actions.join("|"));
+    check("the demo simulates the screen share so the agent has a feed", customerPanel.screenOn);
+
+    /* ---------- the dock must not eat its own overlays ---------- */
+    group("agent dock clearance");
+    await agentFrame.evaluate(() => {
+      const sr = document.querySelector("#supportlayer-root").shadowRoot;
+      sr.querySelector(".sl-agent-toast").className = "sl-agent-toast sl-show";
+    });
+    await sleep(300);
+    const dockGeom = await agentFrame.evaluate(() => {
+      const sr = document.querySelector("#supportlayer-root").shadowRoot;
+      const stage = sr.querySelector(".sl-stage");
+      const rect = (el) => {
+        const b = el.getBoundingClientRect();
+        return { top: Math.round(b.top), bottom: Math.round(b.bottom), left: Math.round(b.left), right: Math.round(b.right), h: Math.round(b.height) };
+      };
+      return {
+        dock: rect(sr.querySelector(".sl-dock")),
+        hint: rect(sr.querySelector(".sl-agent-hint")),
+        toast: rect(sr.querySelector(".sl-agent-toast")),
+        declared: stage.style.getPropertyValue("--sl-dock-h"),
+        viewportH: window.innerHeight,
+      };
+    });
+    check("the dock publishes its measured height", !!dockGeom.declared, dockGeom.declared || "(unset)");
+    check(
+      "the coach line clears the dock",
+      dockGeom.hint.bottom <= dockGeom.dock.top,
+      `hint.bottom=${dockGeom.hint.bottom} dock.top=${dockGeom.dock.top}`
+    );
+    check(
+      "toasts clear the dock",
+      dockGeom.toast.bottom <= dockGeom.dock.top,
+      `toast.bottom=${dockGeom.toast.bottom} dock.top=${dockGeom.dock.top}`
+    );
+    check("the dock stays inside the agent stage", dockGeom.dock.bottom <= dockGeom.viewportH, JSON.stringify(dockGeom.dock));
+
+    /* ---------- two-way chat ---------- */
+    group("two-way chat");
+    await agentFrame.evaluate(() => window.SupportLayer.agent.chat("I can see your checkout — try the pay button again."));
+    const customerGotChat = await waitFor(() =>
+      customerFrame.evaluate(() => {
+        const root = document.querySelector("#supportlayer-root").shadowRoot;
+        const box = root.querySelector(".sl-transcript");
+        return box.textContent.includes("try the pay button again");
+      })
+    );
+    check("the customer receives agent messages in the panel", customerGotChat);
+    eq(
+      "the agent transcript keeps its own side of the conversation",
+      await agentFrame.evaluate(() => window.SupportLayer.getChat().some((m) => m.from === "me" && m.text.includes("pay button"))),
+      true
+    );
+    await customerFrame.evaluate(() => window.SupportLayer.chat("Still spinning, and the total says $52.06."));
+    const agentGotChat = await waitFor(() =>
+      agentFrame.evaluate(() => {
+        const root = document.querySelector("#supportlayer-root").shadowRoot;
+        return root.querySelector(".sl-transcript").textContent.includes("Still spinning");
+      })
+    );
+    check("the agent receives customer messages", agentGotChat);
+    const unreadBadge = await agentFrame.evaluate(() => {
+      const root = document.querySelector("#supportlayer-root").shadowRoot;
+      const badge = root.querySelector(".sl-unread");
+      return { hidden: badge.hidden, text: badge.textContent };
+    });
+    check("a closed chat window raises an unread count", unreadBadge.text === "1" || unreadBadge.text === "2", JSON.stringify(unreadBadge));
+    await clickIn(page, agentFrame, '.sl-dock-btn[data-act="chat"]', { frameSelector: "#agent-frame" });
+    const chatOpened = await waitFor(() =>
+      agentFrame.evaluate(() => {
+        const root = document.querySelector("#supportlayer-root").shadowRoot;
+        const card = root.querySelector(".sl-card:not(.sl-info-card)");
+        return !card.hidden && root.querySelector(".sl-unread").hidden;
+      })
+    );
+    check("opening the chat clears the badge", chatOpened);
+    await clickIn(page, agentFrame, '.sl-card:not(.sl-info-card) .sl-x');
 
     /* ---------- coordinate round trip ---------- */
     group("agent control · coordinates");
@@ -332,14 +490,24 @@ async function main() {
 
     // Normalization math must reproduce the coordinates the customer just reported.
     const normalized = await agentFrame.evaluate((x, y) => {
-      const rect = document.getElementById("stage").getBoundingClientRect();
-      const p = window.__AgentConsole.normalize(rect.left + rect.width * x, rect.top + rect.height * y);
-      return p;
+      const stage = document.querySelector("#supportlayer-root").shadowRoot.querySelector(".sl-stage");
+      const rect = stage.getBoundingClientRect();
+      return window.SupportLayer.agent.normalize(rect.left + rect.width * x, rect.top + rect.height * y);
     }, target.x, target.y);
     check("agent normalization round-trips within 1%", Math.abs(normalized.x - target.x) < 0.01 && Math.abs(normalized.y - target.y) < 0.01,
       `want ${target.x.toFixed(3)},${target.y.toFixed(3)} got ${normalized.x.toFixed(3)},${normalized.y.toFixed(3)}`);
 
-    await agentFrame.evaluate((x, y) => window.__AgentConsole.send({ t: "click", x, y }), target.x, target.y);
+    // Point is deliberately non-destructive: spotlight only, no DOM click.
+    await agentFrame.evaluate((x, y) => window.SupportLayer.agent.send({ t: "point", x, y, color: "#f59e0b" }), target.x, target.y);
+    const pointed = await waitFor(() =>
+      customerFrame.evaluate(() => {
+        const laser = document.querySelector("#supportlayer-root").shadowRoot.querySelector(".sl-laser");
+        return !laser.hidden;
+      })
+    );
+    check("the point tool spotlights without firing a click", pointed && (await customerFrame.evaluate(() => window.__ssnClicked || 0)) === 0);
+
+    await agentFrame.evaluate((x, y) => window.SupportLayer.agent.send({ t: "click", x, y }), target.x, target.y);
     const clicked = await waitFor(() => customerFrame.evaluate(() => window.__ssnClicked > 0), { timeout: 4000 });
     check("remote click fired on the real element", clicked);
     const laser = await customerFrame.evaluate(() => {
@@ -356,7 +524,7 @@ async function main() {
     /* ---------- glass-pane drawing ---------- */
     group("agent control · drawing");
     await agentFrame.evaluate(() =>
-      window.__AgentConsole.send({ t: "draw", start: true, color: "#14b8a6", width: 3, points: [{ x: 0.2, y: 0.2 }, { x: 0.35, y: 0.3 }, { x: 0.5, y: 0.25 }] })
+      window.SupportLayer.agent.send({ t: "draw", start: true, color: "#14b8a6", width: 3, points: [{ x: 0.2, y: 0.2 }, { x: 0.35, y: 0.3 }, { x: 0.5, y: 0.25 }] })
     );
     const drawing = await waitFor(() =>
       customerFrame.evaluate(() => {
@@ -378,7 +546,7 @@ async function main() {
 
     /* ---------- directed typing ---------- */
     group("agent control · directed typing");
-    await agentFrame.evaluate((x, y) => window.__AgentConsole.send({ t: "type", x, y, text: "555-01-9999" }), target.x, target.y);
+    await agentFrame.evaluate((x, y) => window.SupportLayer.agent.send({ t: "type", x, y, text: "555-01-9999" }), target.x, target.y);
     const typing = await waitFor(() =>
       customerFrame.evaluate(() => {
         const root = document.querySelector("#supportlayer-root").shadowRoot;
@@ -408,15 +576,20 @@ async function main() {
       }), { timeout: 6000 });
     check("reload offers the resume prompt instead of silently reconnecting", resumeVisible);
     eq("state is IDLE until the user resumes", await customerFrame.evaluate(() => window.SupportLayer.getState()), "IDLE");
-    await trustedShadowClick(customerFrame, '.sl-view[data-view=resume] [data-act="resume"]');
-    const resumed = await waitFor(() => customerFrame.evaluate(() => window.SupportLayer.getState() === "WAITING"), { timeout: 6000 });
-    check("resuming moves the state to WAITING", resumed);
+    await clickIn(page, customerFrame, '.sl-view[data-view=resume] [data-act="resume"]', { frameSelector: "#customer-frame" });
+    const resumed = await waitFor(() => customerFrame.evaluate(() => ["WAITING", "CONNECTED"].includes(window.SupportLayer.getState())), { timeout: 6000 });
+    check("resuming reopens the session", resumed);
     const updates = await waitFor(async () => (await page.$eval("#chip-events b", (el) => Number(el.textContent))) >= 2, { timeout: 6000 });
     check("a support_update event was emitted on resume", updates);
+    const rejoined = await waitFor(() => customerFrame.evaluate(() => window.SupportLayer.getState() === "CONNECTED"), { timeout: 8000 });
+    check("the agent pane finds the resumed session again", rejoined);
 
     /* ---------- end session ---------- */
     group("session teardown");
-    await trustedShadowClick(customerFrame, '.sl-view[data-view=waiting] [data-act="end"]');
+    const endSel = await customerFrame.evaluate(() =>
+      window.SupportLayer.getState() === "CONNECTED" ? '.sl-view[data-view=live] [data-act="end"]' : '.sl-view[data-view=waiting] [data-act="end"]'
+    );
+    await clickIn(page, customerFrame, endSel, { frameSelector: "#customer-frame" });
     const ended = await waitFor(() => customerFrame.evaluate(() => window.SupportLayer.getState() === "IDLE"), { timeout: 6000 });
     check("endSession drops back to IDLE", ended);
     const cleaned = await customerFrame.evaluate(() => ({
@@ -511,20 +684,40 @@ async function main() {
     const harness = await browser.newPage();
     watch(harness, "test.html");
     await harness.goto(`${BASE}/test.html`, { waitUntil: "domcontentloaded" });
-    group("test harness (test.html)");
+    group("role parameter handling");
+    const roleProbe = await browser.newPage();
+    watch(roleProbe, "test.html?sl_role=agent");
+    await roleProbe.goto(`${BASE}/test.html?sl_role=agent&peer=sl-probe`, { waitUntil: "domcontentloaded" });
+    // NB: only `sl_role` is authoritative — a host app's own `role=` is left alone.
+    const probed = await waitFor(() => roleProbe.evaluate(() => !!(window.SupportLayer && window.SupportLayer.agent)));
+    check("sl_role=agent switches the very same page into the console", probed);
+    eq("the agent knows which peer it was pointed at", await roleProbe.evaluate(() => window.SupportLayer.agent.state().peer), "sl-probe");
+    check(
+      "the agent role leaves the host page's privacy alone",
+      await roleProbe.evaluate(() => !document.getElementById("supportlayer-privacy-css")),
+      "an agent must never redact the page it is looking at"
+    );
+    await roleProbe.close();    group("test harness (test.html)");
+
 
     const badge = await waitFor(async () => {
       const t = await harness.$eval("#cfg-badge", (el) => el.textContent);
       return t.includes("mode=") ? t : false;
     });
     ok("widget booted with the harness config", badge);
+    eq("an unparameterised page is the customer role", await harness.evaluate(() => window.SupportLayer.role), "user");
     eq(
-      "self-hosted delivery resolves the agent link beside the script",
+      "there is no agent page to fetch — the link is built from location.href",
       await harness.evaluate(() => window.SupportLayer.config.liveBase),
-      `${BASE}/agent.html`
+      null
+    );
+    check(
+      "the host app's own role= param is ignored",
+      await harness.evaluate(() => window.SupportLayer.role === "user"),
+      "role=agent in the URL would be the host app's, not ours"
     );
 
-    await harness.click("#btn-checks");
+    await clickSelector(harness, "#btn-checks");
     await waitFor(async () => (await harness.$$eval(".checks li", (els) => els.length)) > 3);
     const checkRows = await harness.$$eval(".checks li", (els) =>
       els.map((el) => ({ pass: el.classList.contains("pass"), text: el.textContent.trim() }))
@@ -537,7 +730,7 @@ async function main() {
     await harness.evaluate(() => {
       document.getElementById("f-fields").value = "{ not: valid json ";
     });
-    await harness.click("#btn-load");
+    await clickSelector(harness, "#btn-load");
     const fallback = await waitFor(async () => {
       const t = await harness.$eval("#cfg-badge", (el) => el.textContent);
       return t.includes("fields=1") ? t : false;
@@ -548,7 +741,7 @@ async function main() {
 
     // A non-headless widget shows the FAB; headless hides it.
     await harness.evaluate(() => { document.getElementById("f-fields").value = '[{"name":"issue","type":"textarea","label":"Issue"}]'; document.getElementById("f-headless").checked = true; });
-    await harness.click("#btn-load");
+    await clickSelector(harness, "#btn-load");
     const fabHidden = await waitFor(() =>
       harness.evaluate(() => {
         const root = document.querySelector("#supportlayer-root");
@@ -558,20 +751,33 @@ async function main() {
     );
     check("data-headless hides the floating button", fabHidden);
 
-    /* ============================= agent.html standalone ============================= */
+    /* ============================= agent role discovered by the bus ============================= */
+    group("agent role (standalone)");
     const standalone = await browser.newPage();
-    watch(standalone, "agent-standalone");
-    await standalone.goto(`${BASE}/agent.html?peer=sl-does-not-exist`, { waitUntil: "domcontentloaded" });
-    const agentTitle = await standalone.title();
-    check("agent console renders standalone", agentTitle.includes("SupportLayer"));
-    const standaloneOk = await waitFor(() => standalone.evaluate(() => !!window.__AgentConsole), { timeout: 5000 });
-    check("agent console boots with a peer target", standaloneOk);
+    watch(standalone, "agent-role");
+    await standalone.goto(`${BASE}/demo-app.html?sl_role=agent&sl-demo=1`, { waitUntil: "domcontentloaded" });
+    const standaloneOk = await waitFor(() => standalone.evaluate(() => !!(window.SupportLayer && window.SupportLayer.agent)), { timeout: 5000 });
+    check("a page with ?sl_role=agent boots the console", standaloneOk);
+    const standaloneShell = await standalone.evaluate(() => {
+      const root = document.querySelector("#supportlayer-root").shadowRoot;
+      const agentEl = root.querySelector(".sl-agent").getBoundingClientRect();
+      const pageHeading = document.querySelector("h1").getBoundingClientRect();
+      return {
+        coversViewport: Math.round(agentEl.width) >= window.innerWidth && Math.round(agentEl.height) >= window.innerHeight,
+        coversTheApp: agentEl.top <= pageHeading.top,
+        waiting: /Waiting/.test(root.querySelector(".sl-badge").textContent),
+        noFab: !root.querySelector(".sl-fab"),
+      };
+    });
+    check("the console covers the host app instead of sitting on it", standaloneShell.coversViewport && standaloneShell.coversTheApp, JSON.stringify(standaloneShell));
+    check("with no customer it waits, and never shows the request button", standaloneShell.waiting && standaloneShell.noFab, JSON.stringify(standaloneShell));
     if (HEADED) await standalone.screenshot({ path: path.join(SHOT_DIR, "agent-headed.png") });
+    await standalone.close();
 
     /* ============================= CDN delivery =============================
      * The quick-start snippet loads the widget from jsDelivr, which serves `.html` as
-     * text/plain. Serve our own copy for that URL so the CDN branch is exercised without
-     * depending on the network. */
+     * text/plain — the old architecture pointed at a broken console URL because of it.
+     * There is no second file to fetch any more, which this asserts. */
     group("CDN delivery");
     const cdnPage = await browser.newPage();
     watch(cdnPage, "cdn");
@@ -590,11 +796,11 @@ async function main() {
     );
     const cdnReady = await waitFor(() => cdnPage.evaluate(() => !!(window.SupportLayer && window.SupportLayer.config)), { timeout: 6000 });
     check("widget boots when loaded from a static-file CDN", cdnReady);
-    const cdnLiveBase = cdnReady ? await cdnPage.evaluate(() => window.SupportLayer.config.liveBase) : null;
-    eq(
-      "CDN delivery points the agent link at the Pages console",
-      cdnLiveBase,
-      "https://spuds0588.github.io/SupportLayer/agent.html"
+    eq("a CDN copy is still the customer role", cdnReady ? await cdnPage.evaluate(() => window.SupportLayer.role) : null, "user");
+    check(
+      "there is no second document to serve — the widget never links to one",
+      !/agent\.html/.test(widgetSource),
+      "an agent.html reference crept back into the widget"
     );
     await cdnPage.close();
 

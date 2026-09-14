@@ -122,7 +122,7 @@
       <img class="snap" id="snap" alt="snapshot" hidden>
       <div class="row">
         <button id="btn-copy" type="button">Copy payload</button>
-        <button id="btn-open-agent" type="button">Open agent console for this session</button>
+        <button id="btn-open-agent" type="button">Open the agent view for this session</button>
       </div>
       <p class="hint" style="margin-top:10px">With <span class="kbd">data-webhook</span> blank the widget still emits the
         event and skips the network call, so this harness works offline. Set a webhook to a local echo server to watch the
@@ -134,8 +134,10 @@
       <ol class="hint" style="padding-left:18px;margin:0">
         <li>Load the widget, then trigger <span class="kbd">SupportLayer.requestHelp()</span> from the floating button (or
           the console) and submit the form.</li>
-        <li>Open the agent console with the <span class="kbd">live_session_url</span> from the payload. Two browser windows
-          are required for the real PeerJS path; <span class="kbd">data-demo</span> uses the loopback bus inside one page.</li>
+        <li>Open the <span class="kbd">live_session_url</span> from the payload — it is this very page plus
+          <span class="kbd">?sl_role=agent&amp;peer=…</span>, so the widget boots into the agent console instead of the
+          request button. Two browser windows are required for the real PeerJS path;
+          <span class="kbd">data-demo</span> uses the loopback bus inside one page.</li>
         <li>For the real WebRTC path, turn <span class="kbd">data-demo</span> off and serve over http or https — capture
           needs a secure context and a real click.</li>
       </ol>
@@ -261,10 +263,18 @@
     });
     assert("API surface complete", function () {
       if (!api) return "no widget";
-      var missing = ["requestHelp", "endSession", "getState", "getSession", "reset"].filter(function (k) {
+      var missing = ["requestHelp", "endSession", "getState", "getSession", "reset", "chat", "getChat"].filter(function (k) {
         return typeof api[k] !== "function";
       });
       return missing.length ? "missing: " + missing.join(", ") : true;
+    });
+    assert("an unparameterised page is the customer role", function () {
+      if (!api) return "no widget";
+      return api.role === "user" ? true : "role is " + api.role;
+    });
+    assert("the agent console seam is absent for customers", function () {
+      if (!api) return "no widget";
+      return api.agent === undefined ? true : "SupportLayer.agent leaked into the customer role";
     });
     assert("version reported", function () {
       return api && /^\d+\.\d+\.\d+$/.test(api.version) ? true : "got: " + (api && api.version);

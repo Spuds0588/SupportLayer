@@ -3,9 +3,11 @@
 Status legend: `[x]` done, `[~]` in progress, `[ ]` not started.
 Mirrors PRD Part 3 plus the launch/hosting work.
 
-**v1 is built, published, and green: 87/87 end-to-end checks pass in headless and headed
+**v2 is built, published, and green: 119/119 end-to-end checks pass in headless and headed
 Chromium, locally *and* against the live GitHub Pages origin.** Live at
 https://spuds0588.github.io/SupportLayer/. Remaining work is the explicit backlog.
+
+v2 collapsed the two-page design into one: the agent no longer has a page of their own.
 
 ## Phase 0 — Repo & docs  ✅ done
 - [x] Read `PRD-SupportLayer.md`; confirm scope with the maintainer's brief.
@@ -49,24 +51,29 @@ https://spuds0588.github.io/SupportLayer/. Remaining work is the explicit backlo
 - [x] Agent overlay chrome is fully out of layout while idle (canvas is `display: none`
       until a stroke arrives), so an idle page shows nothing but the FAB.
 
-## Phase 5 — Agent dashboard (`agent.html`)  ✅ done
-- [x] Scaffold with CSS grid/flex dashboard UI.
-- [x] URL parameter parsing for `peer` (+ `demo`).
-- [x] PeerJS connect, data channel, answer/receive video stream.
+## Phase 5 — Agent experience  ✅ done (v2: same page, `?sl_role=agent`)
+- [x] ~~Scaffold a separate dashboard page~~ — **deleted in v2.** The agent loads the customer's
+      own URL with `?sl_role=agent&peer=<id>`; the widget mounts the agent view instead of the FAB.
+- [x] URL parameter parsing for `sl_role` / `peer` (+ `sl-demo`). A bare `role=` is ignored.
+- [x] PeerJS connect, data channel, answer/receive the customer's stream.
 - [x] Coordinate normalization with `object-fit: contain` letterboxing (and full-screen
       capture offset from client window geometry).
-- [x] Mouse mapping per toolbar state (Laser / Type / Draw).
+- [x] Floating bottom tool dock: **Point / Click / Draw / Clear**, swatches, **Chat**,
+      **Report**, **End** — the Zoom-style annotation bar, not a dashboard.
+- [x] A coach line of shortcuts on connect that fades away and returns on dock hover.
+- [x] Dock height published as `--sl-dock-h` so the toast and coach line clear it.
 - [x] Draw points batched per animation frame (~60fps) and flushed on mouse-up.
+- [x] Screenshots removed from the agent's face: full-bleed customer stage + transcript only.
 
 ## Phase 6 — Landing page (GitHub Pages)  ✅ done
 - [x] `index.html` in the Layer-family visual language (Bulma, floating SVG field).
 - [x] Hero, install snippet (jsDelivr + GH Pages), animated request→resolve flow.
 - [x] Feature grid pulled from PRD §1.4.
-- [x] **Simulated demo**: full-viewport mock customer app + embedded agent dashboard +
+- [x] **Simulated demo**: full-viewport mock customer app + the *same app in the agent role* +
       mock webhook inspector, wired through the loopback transport.
 - [x] MailLayer Embedded and PhoneLayer Embedded loaded live into the page, with their own
       demo buttons in a Sisters section and in the footer.
-- [x] Docs section: attributes table, headless API, webhook schema, agent URL.
+- [x] Docs section: attributes table, headless API, webhook schema, agent URL contract.
 - [x] `test.html` integration harness.
 - [x] `serve.js` / `package.json` / `.gitignore` / `favicon.svg`.
 
@@ -81,18 +88,37 @@ https://spuds0588.github.io/SupportLayer/. Remaining work is the explicit backlo
 ## Phase 8 — Ship  ✅ done
 - [x] Push `main` checkpoints as work landed.
 - [x] GitHub Pages live on `main` / root: https://spuds0588.github.io/SupportLayer/
-      (`index.html`, `supportlayer.js`, `agent.html`, `test.html`, `demo-app.html`,
-      `favicon.svg` all return 200).
+      (`index.html`, `supportlayer.js`, `test.html`, `demo-app.html`,
+      `favicon.svg`, `INTEGRATION.md` all return 200).
 - [x] `npm run test:live` — the full suite runs against the deployed origin (headless and
       headed), so the published artifact is verified, not assumed.
 - [x] `INTEGRATION.md` — consumer-facing guide for integrators and coding agents.
 - [x] `live_session_url` no longer points at a CDN: static-file CDNs serve `.html` as
-      `text/plain`, so `defaultLiveBase()` falls back to the Pages console. Covered by a new
-      request-interception test (87 checks total).
+      `text/plain`, so `defaultLiveBase()` fell back to the Pages console (87 checks).
+      **Obsolete in v2** — the link is now the customer's own `location.href`, so there is no
+      `.html` anywhere in the flow and the branch was deleted with the console page.
 
-## Backlog (explicitly not in v1)
+## Phase 9 — v2 restructure (one file, two roles)  ✅ done
+- [x] Delete `agent.html`; the agent role lives in `supportlayer.js`. (`git rm`.)
+- [x] `?sl_role=agent&peer=<id>` boots the agent view; `liveSessionUrl()` is built from
+      `location.href`, so the link works on any route the host app already serves.
+- [x] The request panel **becomes** the session: chat thread, or a two-way audio/video call
+      in the same surface, per `data-mode`.
+- [x] Two-way media: `audio` and `video` stream in both directions, not just agent → user.
+- [x] Removed the in-session channel switcher after review — **the mode is the developer's
+      call at install time**; neither the customer nor the agent may change it mid-session.
+- [x] Agent surface is a video-meeting-style experience: full-bleed customer view + floating
+      annotation dock, no payload panes or dashboards.
+- [x] Landing-page demo runs the same app in both roles instead of two different pages.
+- [x] Suite grew from 87 to 119 checks: role isolation, dock geometry (toast/coach line above
+      the dock, dock above the stage floor), FAB inside the customer viewport, unparameterised
+      pages staying customer-role, and "there is no agent page to fetch".
+
+## Backlog (explicitly not in v2)
 - [ ] Multiparty sessions / multiple agents per session.
-- [ ] Voice-only and video-mode annotation parity (audio mode ships with data channel
-      only in v1).
+- [ ] A real two-browser WebRTC pass: `getDisplayMedia` permission flow and live agent media
+      have only been exercised over the loopback bus. The media stack itself is unverified.
 - [ ] Optional `data-position` placement attribute for the FAB.
 - [ ] Webhook retry queue for offline submissions.
+- [ ] Auto-fit the agent dock on very short viewports (it wraps, but a <360px-tall stage is
+      cramped).

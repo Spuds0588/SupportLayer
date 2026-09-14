@@ -2,18 +2,19 @@
 
 SupportLayer is a **zero-backend, drop-in diagnostic and live P2P support widget** for web
 applications, and the third sibling in the Layer family (MailLayer, PhoneLayer,
-SupportLayer). Repo is a **static site + two single-file deliverables**: no build step, no
+SupportLayer). Repo is a **static site + one single-file deliverable**: no build step, no
 bundler, no runtime dependencies, no framework.
 
 ## Files
 
-- `supportlayer.js` — the product. Vanilla JS IIFE, one global `window.SupportLayer`.
-- `agent.html` — the support agent dashboard. Single self-contained HTML file (inline
-  CSS/JS), loads PeerJS from CDN only when it is not running in simulated mode.
-- `index.html` — landing page + **simulated demo** (mock customer app, embedded agent
-  dashboard, mock webhook inspector, MailLayer + PhoneLayer live demos).
+- `supportlayer.js` — the product, **both roles**. Vanilla JS IIFE, one global
+  `window.SupportLayer`. There is no agent page: the agent loads the *customer's own URL*
+  with `?sl_role=agent&peer=<id>` and this same script boots the agent console instead of
+  the request button. Do not reintroduce a second HTML deliverable.
+- `index.html` — landing page + **simulated demo** (mock customer app, the same app again in
+  the agent role, mock webhook inspector, MailLayer + PhoneLayer live demos).
 - `test.html` — integration harness: loads the widget in every mode against a local
-  webhook catcher, and links out to a real `agent.html` session.
+  webhook catcher, and links out to a real agent-role session.
 - `serve.js` — zero-dependency static dev server (`npm start`).
 - `tests/e2e.mjs` — Puppeteer driver for the headless/headed smoke + interaction suite.
 - `favicon.svg` — hand-written, no external asset dependencies.
@@ -45,7 +46,7 @@ bundler, no runtime dependencies, no framework.
    `view-resume` UI. Never auto-reconnect without a user gesture — browsers block
    automated media capture.
 5. **Coordinate math.** Every coordinate on the wire is **normalized `0.0`–`1.0`**, never
-   pixels. The agent dashboard must normalize against the *rendered video* geometry
+   pixels. The agent view must normalize against the *rendered video* geometry
    (accounting for `object-fit: contain` letterboxing) and, when the shared surface is the
    whole screen, offset by the client's reported window geometry. Getting this wrong
    silently misaligns clicks — it is the #1 regression risk in this repo.
@@ -58,7 +59,18 @@ bundler, no runtime dependencies, no framework.
 
 - **Config** comes from `document.currentScript.dataset`: `webhook`, `mode`
   (`none|chat|audio|video`), `theme`, `headless`, `blur-selectors`, `blur-regex`,
-  `fields` (JSON, `try/catch` parsed, defaults to a single `textarea`).
+  `fields` (JSON, `try/catch` parsed, defaults to a single `textarea`), `demo`,
+  `peer-cdn`, `live-base`, `color`, `label`/`title`/`chat-label`.
+- **Role is a URL param, not an attribute.** `?sl_role=agent` (or `data-role="agent"`) flips
+  `role` to `agent`. A bare `role=` param is deliberately ignored — host apps use that name
+  for their own permissions and the widget must not hijack it.
+- **The communication channel is the developer's decision, fixed at install time.**
+  `data-mode` / `?sl_mode=` selects it and the customer's request panel simply *becomes* the
+  chat thread or the call. There is intentionally **no in-session switcher**: neither the user
+  nor the agent can turn a chat into a call. Do not add one.
+- **`liveSessionUrl(peerId)`** builds the agent link as the customer's own `location.href`
+  plus `sl_role=agent&peer=<id>` (plus `sl-demo=1` in demo mode). `data-live-base` overrides
+  the base. This is what lands in the webhook payload as `live_session_url`.
 - **States:** `IDLE` → `WAITING` → `CONNECTED`, plus `SENDING` internals and
   `status: open|cancelled|completed` on the webhook payload.
 - **Events:** `support_request` on first submit, `support_update` on resume / cancel /
@@ -82,33 +94,46 @@ bundler, no runtime dependencies, no framework.
 - **`[hidden] { display: none !important; }` is declared in the shadow stylesheet on purpose.**
   Without it, any overlay carrying its own `display` value (`.sl-draw-hint`) stays visible and
   blocks host clicks even while `hidden` is set.
-- **Never let a CDN host the agent console.** Static-file CDNs (jsDelivr, unpkg, raw.githubusercontent)
-  serve `.html` as `text/plain`, so the console renders as source code. `defaultLiveBase()` therefore
-  detects those hosts and points `live_session_url` at the project's Pages console; self-hosted copies
-  resolve `agent.html` beside the script, and `data-live-base` always wins. Both branches are asserted
-  in the e2e suite — the CDN branch is exercised by request-interception, not by hitting the network.
+- **One file, two roles — never a second deliverable.** `agent.html` existed once and was removed:
+  it duplicated the app shell, drifted from the widget, and broke on static-file CDNs (which serve
+  `.html` as `text/plain`, so the console rendered as source code). The agent role now needs no page
+  of its own, so a CDN install and a self-hosted install behave identically. Any change that adds a
+  second HTML file, or that makes the agent link skip `location.href`, is a regression.
+- **Reports, privacy blur and screen capture only ever run in the customer role.** The agent role
+  must never POST a webhook or blur its own document. Guard new capture code on `!AGENT`.
 - **The loopback announce loop must die with its transport.** It stops on connect, on
   `close()`, and after 200 tries, and it captures `peerId` locally instead of reading
   `session` — otherwise a timer fires after teardown and throws on a null session.
 
-## Agent dashboard (`agent.html`)
+## Agent experience (`?sl_role=agent&peer=<clientPeerId>`)
 
-- URL contract: `agent.html?peer=<clientPeerId>`; `&demo=1` selects the loopback bus.
-- No tool selected → laser click. Tools: **Laser**, **Type**, **Draw**, **Clear**,
-  **End session**.
+The agent role is the same document with a param, so `AGENT` is true and `mountAgent()` replaces the
+customer mount entirely: full-bleed stage, chat transcript, floating dock. `&sl-demo=1` selects the
+loopback bus.
+
+- **It should feel like a video meeting, not a dashboard.** One stage, one dock. No session lists,
+  no metrics, no raw payload panes, no extra chrome — if a feature is not something the agent does
+  *mid-call*, it does not belong on this surface.
+- **The dock is a floating bottom bar of tools**, the way annotation works in Zoom/Meet: **Point**,
+  **Click**, **Draw** (with colour swatches), **Clear**, **Chat**, **Report**, **End**. Point is the
+  resting state; it moves a laser and clicks nothing, which is what makes it safe to leave armed.
+- The dock publishes its measured height as `--sl-dock-h`; the toast and the coach line sit above
+  `calc(var(--sl-dock-h) + 12px)`. Both overlapped the dock once, so the layout test now asserts they
+  clear it — keep that assertion if you touch either.
 - The mock feed in demo mode is drawn at the *client's* viewport aspect ratio so
   normalized coordinates stay honest. It is labelled `SIMULATED FEED`; commands sent from
   it are real and land on the real page.
-- Keep the log pane honest: every outgoing command is echoed with a timestamp.
 
 ## Demo architecture (`index.html`)
 
 The landing page's demo is three real pieces wired together, not a mock:
 
 1. `demo-app.html` in an iframe — a genuine customer page running the genuine widget.
-2. `agent.html?demo=1` in a second iframe — the genuine console, talking over the `BroadcastChannel` loopback bus.
+2. `demo-app.html?sl_role=agent&sl-demo=1&peer=<id>` in a second iframe — the *same page* in the
+   agent role, which is precisely the real workflow, talking over the `BroadcastChannel` loopback bus.
 3. A payload inspector in the parent page — fed by the demo app's `postMessage` bridge of
-   `supportlayer:webhook`, plus polling of `SupportLayer.getState()` and `__AgentConsole.state()`.
+   `supportlayer:webhook`, plus polling of `SupportLayer.getState()` and the agent-role state seam
+   `SupportLayer.agent.state()` (undefined in the customer role, which `test.html` asserts).
 
 The customer frame is its own document on purpose: its viewport *is* the customer viewport, so the coordinates the
 agent sends land exactly where the agent clicked. Do not move the demo app into the parent document — the mapping
@@ -117,7 +142,7 @@ breaks and the FAB/panel would cover the marketing page.
 ## Testing
 
 - `npm start` then `node tests/e2e.mjs` (headless) or `node tests/e2e.mjs --headed`.
-- The suite must stay green in **both** modes on every change: 84 checks cover config parsing, the request flow,
+- The suite must stay green in **both** modes on every change: 119 checks cover config parsing, the request flow,
   redaction round-trips, coordinate accuracy (±12px), drawing auto-clear, directed typing, reload/resume, teardown,
   the harness assertions, and desktop/mobile layout. Headed runs have historically caught bugs headless missed
   (a loopback timer firing after teardown, the always-visible draw hint).

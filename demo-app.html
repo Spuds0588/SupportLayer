@@ -162,11 +162,13 @@
 </footer>
 
 <!-- The product under test. data-demo="true" swaps screen capture for a synthetic frame and
-     PeerJS for a same-origin loopback bus, so the flow works with no backend and no permissions. -->
+     PeerJS for a same-origin loopback bus, so the flow works with no backend and no permissions.
+     The support agent loads THIS SAME PAGE with ?sl_role=agent&sl-demo=1 and the widget boots
+     into the full-screen console instead of the request button. One app, two roles. -->
 <script
   src="supportlayer.js"
   data-demo="true"
-  data-mode="chat"
+  data-mode="video"
   data-theme="#14b8a6"
   data-webhook="https://hooks.example.com/supportlayer/demo"
   data-blur-selectors=".sensitive-data, .amount-due, .order-total"
@@ -200,9 +202,14 @@
 
   /**
    * Bridge the widget's public events up to the landing page so its webhook
-   * inspector can display exactly what would have been POSTed.
+   * inspector can display exactly what would have been POSTed. The role is attached
+   * because this same page is also loaded in the agent role — the inspector only
+   * cares about the customer pane.
    */
+  var widgetRole = window.SupportLayer ? window.SupportLayer.role : "user";
+
   function toParent(message) {
+    message.role = widgetRole;
     try {
       if (window.parent && window.parent !== window) window.parent.postMessage(message, "*");
     } catch (e) {
