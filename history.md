@@ -259,3 +259,16 @@ sister-status DOM updates, and the `.is-demo` box variant.
 
 **142/142 still green** headless and headed, including the mobile layout checks (no horizontal
 overflow, nav drops into the flow).
+
+**ZipLayer joined the family list.** The repo is `Spuds0588/ZipLayer` and its site is live at
+`spuds0588.github.io/ZipLayer/` — note the casing, `ZipLayer`, not `ZIPlayer`; only the canonical
+spelling resolves. It is now the third quiet link in the footer, alongside MailLayer and
+PhoneLayer, plus a line in the README's Sister projects list.
+
+Two stale claims surfaced while wiring it up. `agents.md` still described SupportLayer as "the third
+sibling in the Layer family (MailLayer, PhoneLayer, SupportLayer)" — true when there were three, no
+longer. And its file list still promised "MailLayer + PhoneLayer live demos" on the homepage, which
+the previous session deleted. Both corrected.
+
+Checked every family link before shipping them: MailLayer 301s to its canonical
+`embedded.maillayer.wiki` and resolves 200; PhoneLayer, ZipLayer and SupportLayer are all direct 200s.

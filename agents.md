@@ -1,9 +1,9 @@
 # SupportLayer — Agent Guide
 
 SupportLayer is a **zero-backend, drop-in diagnostic and live P2P support widget** for web
-applications, and the third sibling in the Layer family (MailLayer, PhoneLayer,
-SupportLayer). Repo is a **static site + one single-file deliverable**: no build step, no
-bundler, no runtime dependencies, no framework.
+applications, and a sibling in the Layer family (MailLayer, PhoneLayer, ZipLayer). Repo is a
+**static site + one single-file deliverable**: no build step, no bundler, no runtime
+dependencies, no framework.
 
 ## Files
 
@@ -12,7 +12,9 @@ bundler, no runtime dependencies, no framework.
   with `?sl_role=agent&peer=<id>` and this same script boots the agent view instead of
   the request button. Do not reintroduce a second HTML deliverable.
 - `index.html` — landing page + **simulated demo** (mock customer app, the same app again in
-  the agent role, mock webhook inspector, MailLayer + PhoneLayer live demos).
+  the agent role, mock webhook inspector). It sells and points at `INTEGRATION.md`; it is
+  deliberately *not* the configuration reference. The MailLayer and PhoneLayer scripts are still
+  loaded, but only one quiet footer line names the sister projects.
 - `test.html` — integration harness: loads the widget in every mode against a local
   webhook catcher, and links out to a real agent-role session.
 - `serve.js` — zero-dependency static dev server (`npm start`).

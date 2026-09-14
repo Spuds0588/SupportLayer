@@ -152,6 +152,9 @@ v2 collapsed the two-page design into one: the agent no longer has a page of the
       from six steps to four.
 - [x] Lede buttons and nav renamed to match (“How it's installed”, “Getting started”).
 - [x] Page now reads: hero → why → demo → install → footer.
+- [x] Added **ZipLayer** to the family links (`spuds0588.github.io/ZipLayer/`), and corrected
+      `agents.md`, which still called SupportLayer “the third sibling” and still described
+      MailLayer/PhoneLayer “live demos” on a homepage that no longer has them.
 
 ## Backlog (explicitly not in v2)
 - [ ] Multiparty sessions / multiple agents per session.

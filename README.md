@@ -195,8 +195,9 @@ verified rather than assumed.
 
 - [MailLayer Embedded](https://spuds0588.github.io/MailLayer-Embedded/) — one line turns `mailto:` links into native webmail compose windows.
 - [PhoneLayer Embedded](https://spuds0588.github.io/PhoneLayer-Embedded/) — one line routes `tel:`/`sms:` links to 49 VoIP and SMS providers.
+- [ZipLayer](https://spuds0588.github.io/ZipLayer/) — one line replaces a monolithic `.zip` download with an in-browser X-ray preview and selective extraction.
 
-All three follow the same philosophy: client-only, no backend, no build step, MIT.
+All four follow the same philosophy: client-only, no backend, no build step, MIT.
 
 ## License
 
