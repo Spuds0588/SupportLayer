@@ -146,12 +146,19 @@
   /* ------------------------- the storyboard ------------------------- */
   /* minmax(0, …) rather than 1fr: a 1fr track refuses to shrink below its content's min-content
      width, and the frame bar's nowrap URL floored it at 466px — which overflowed a 390px phone. */
-  .story-grid { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 20px; align-items: start; }
-  .story-pane { min-width: 0; }
-  .screen { position: relative; height: 404px; overflow: hidden; }
-  @media (max-width: 900px) { .story-grid { grid-template-columns: minmax(0, 1fr); } .screen { height: 340px; } }
+  .stage { max-width: 780px; margin: 0 auto; }
+  .stage .frame { overflow: hidden; background: #0b0e13; transition: border-color .45s ease, box-shadow .45s ease; }
+  .story[data-side="customer"] .stage .frame { border-color: rgba(20,184,166,.45); box-shadow: 0 24px 60px rgba(0,0,0,.45); }
+  .story[data-side="agent"] .stage .frame { border-color: rgba(154,120,255,.5); box-shadow: 0 24px 60px rgba(0,0,0,.45); }
 
-  .mock-app { background: #f7f8fb; color: #12151c; font-size: 12.5px; }
+  /* One window, two perspectives: the views cross-fade on top of each other. */
+  .viewport { position: relative; height: 420px; overflow: hidden; }
+  @media (max-width: 700px) { .viewport { height: 348px; } }
+  .view { position: absolute; inset: 0; opacity: 0; visibility: hidden; transition: opacity .45s ease; }
+  .view.on { opacity: 1; visibility: visible; }
+  @media (prefers-reduced-motion: reduce) { .view { transition: none; } }
+
+  .mock-app { position: absolute; inset: 0; background: #f7f8fb; color: #12151c; font-size: 12.5px; }
   .mock-nav { display: flex; align-items: center; gap: 8px; padding: 10px 14px; background: #fff; border-bottom: 1px solid #e6e8ee; font-weight: 800; font-size: 12px; }
   .mock-logo { width: 16px; height: 16px; border-radius: 5px; background: #f4a52a; }
   .mock-cart { margin-left: auto; background: #12151c; color: #fff; border-radius: 999px; padding: 3px 9px; font-size: 10.5px; font-weight: 700; }
@@ -161,6 +168,7 @@
   .mock-line b { color: #12151c; }
   .mock-sum { border-bottom: 0; border-top: 1px solid #e6e8ee; margin-top: 6px; padding-top: 9px; font-weight: 800; color: #12151c; }
   .mock-pay { margin-top: 12px; text-align: center; padding: 10px; border-radius: 9px; background: #14b8a6; color: #05100e; font-weight: 800; }
+  .mock-foot { margin-top: 11px; font-size: 11px; color: #949bab; }
   /* Kept clear of the widget panel's column so the failure message stays readable. */
   .mock-error { position: relative; margin-top: 10px; max-width: 252px; padding: 9px 10px; border-radius: 9px; background: #fef2f2; border: 1px solid #fecaca; color: #b91c1c; font-size: 11.5px; }
 
@@ -172,7 +180,13 @@
   .js-form { padding: 11px 12px 13px; }
   .mock-field { border: 1px solid #e6e8ee; border-radius: 8px; padding: 7px 9px; color: #949bab; font-size: 11.5px; }
   .mock-field-2 { margin-top: 7px; color: #12151c; }
+  .mock-redact { margin-top: 8px; padding: 7px 9px; border-radius: 8px; background: #f0fdfa; border: 1px dashed #14b8a6; color: #0f766e; font-size: 10.5px; font-weight: 700; }
+  /* Redaction is the beat itself, so it lands a moment after the form does rather than
+     appearing with it — `both` holds the hidden state through the delay. */
+  .js-redact.on { animation: story-reveal .45s ease .4s both; }
+  @keyframes story-reveal { from { opacity: 0; transform: translateY(-4px); } to { opacity: 1; transform: none; } }
   .mock-send { margin-top: 9px; text-align: center; padding: 8px; border-radius: 8px; background: #14b8a6; color: #05100e; font-weight: 800; font-size: 11.5px; }
+  .mock-incoming { position: absolute; left: 50%; top: 14px; transform: translateX(-50%); padding: 7px 13px; border-radius: 999px; background: #0f766e; color: #fff; font-weight: 800; font-size: 11.5px; box-shadow: 0 8px 22px rgba(0,0,0,.28); }
   .mock-chat { padding: 10px 12px 12px; display: grid; gap: 7px; }
   .msg { max-width: 88%; padding: 7px 10px; border-radius: 10px; font-size: 11.5px; }
   .msg.them { background: #f1f3f7; color: #12151c; }
@@ -182,7 +196,7 @@
   /* Anchored to the error banner, not to the pane, so it lands on the problem at every width. */
   .mock-ring { position: absolute; inset: -7px; border: 2.5px solid var(--primary); border-radius: 12px; }
 
-  .mock-agent { background: #0a0c10; }
+  .mock-agent { position: absolute; inset: 0; background: #0a0c10; }
   /* The team's chat sits underneath the whole time, so the right pane never reads as a void
      before the report lands. The report card simply covers it from step 3. */
   .chat-bg { position: absolute; inset: 0; padding: 16px; display: grid; gap: 10px; align-content: start; }
@@ -219,26 +233,32 @@
   .js-error, .js-panel, .js-form, .js-chat, .js-reply-1, .js-reply-2 { display: none; }
   .js-error.on, .js-panel.on, .js-form.on, .js-reply-1.on, .js-reply-2.on { display: block; }
   .js-chat.on { display: grid; }
-  .js-notice, .js-session, .js-session-spot, .js-ring { opacity: 0; visibility: hidden; transition: opacity .35s ease; }
-  .js-notice.on, .js-session.on, .js-session-spot.on, .js-ring.on { opacity: 1; visibility: visible; }
+  /* The FAB and the highlight toast belong to specific beats, not to the frame — they start
+     hidden rather than being switched off partway, so step 0 is a plainly normal checkout. */
+  .js-notice, .js-session, .js-session-spot, .js-ring, .js-fab, .js-incoming { opacity: 0; visibility: hidden; transition: opacity .35s ease; }
+  .js-notice.on, .js-session.on, .js-session-spot.on, .js-ring.on, .js-fab.on, .js-incoming.on { opacity: 1; visibility: visible; }
   .off { display: none !important; }
   @media (prefers-reduced-motion: reduce) {
     .mock-fab.pulse { animation: none; }
-    .js-notice, .js-session, .js-session-spot, .js-ring { transition: none; }
+    .js-redact.on { animation-duration: .01s; animation-delay: 0s; }
+    .js-notice, .js-session, .js-session-spot, .js-ring, .js-fab, .js-incoming { transition: none; }
   }
 
-  .story-rail { display: flex; align-items: flex-start; gap: 18px; margin-top: 18px; }
-  .story-captions { flex: 1; display: grid; gap: 3px; margin: 0; padding: 0; list-style: none; counter-reset: st; }
-  .story-captions li { position: relative; padding: 7px 10px 7px 38px; border-radius: 10px; font-size: .88rem; color: #6b7385; transition: color .3s ease, background .3s ease; }
-  .story-captions li::before {
-    counter-increment: st; content: counter(st); position: absolute; left: 12px; top: 50%; transform: translateY(-50%);
-    width: 18px; height: 18px; border-radius: 50%; border: 1px solid rgba(255,255,255,.14); color: #6b7385;
-    font-size: .64rem; font-weight: 800; display: flex; align-items: center; justify-content: center;
-  }
-  .story-captions li.on { color: #fff; background: rgba(255,255,255,.04); }
-  .story-captions li.on::before { border-color: var(--primary-border); background: var(--primary-dim); color: #9fe9dc; }
-  .story-rail .mini-btn { flex: none; }
-  @media (max-width: 768px) { .story-rail { flex-direction: column; } }
+  .story-rail { max-width: 780px; margin: 18px auto 0; }
+  .rail-head { display: flex; align-items: center; gap: 12px; margin-bottom: 12px; }
+  .rail-head .spacer { flex: 1; }
+  /* nowrap + flex:none: the chip is a single label and must not wrap or be squeezed by the
+     progress dots beside it. */
+  .feature { display: inline-flex; align-items: center; flex: none; white-space: nowrap; padding: 6px 13px; border-radius: 999px; background: var(--primary-dim); border: 1px solid var(--primary-border); color: #9fe9dc; font-size: .78rem; font-weight: 800; }
+  .progress { display: flex; gap: 6px; margin: 0; padding: 0; list-style: none; }
+  .progress li { width: 20px; height: 4px; border-radius: 999px; background: rgba(255,255,255,.13); transition: background .3s ease; }
+  .progress li.done { background: rgba(20,184,166,.4); }
+  .progress li.on { background: var(--primary); }
+  .story-captions { margin: 0; padding: 0; list-style: none; min-height: 2.9em; }
+  .story-captions li { display: none; font-size: .98rem; line-height: 1.45; color: #e7ebf2; }
+  .story-captions li.on { display: block; }
+  .rail-head .mini-btn { flex: none; }
+  @media (max-width: 700px) { .rail-head { flex-wrap: wrap; } }
 
   .pre {
     background: #07090d; border: 1px solid rgba(255,255,255,.08); border-radius: 14px; padding: 16px;
@@ -374,85 +394,87 @@
       </p>
     </div>
 
-    <div class="story" id="story" data-step="0">
-      <div class="story-grid">
-
-        <!-- ------------------------- the customer ------------------------- -->
-        <div class="story-pane">
-          <div class="frame">
-            <div class="frame-bar">
-              <span class="dots"><i style="background:#ff5f57"></i><i style="background:#febc2e"></i><i style="background:#28c840"></i></span>
-              <span class="url">shop.sunnybakery.example/checkout</span>
-              <span class="tag">Customer</span>
-            </div>
-            <div class="screen mock-app">
-              <div class="mock-nav"><span class="mock-logo"></span> Sunny Bakery <span class="mock-cart">Cart · 3</span></div>
-              <div class="mock-body">
-                <h4>Checkout</h4>
-                <div class="mock-line"><span>Sourdough starter kit</span><b>$32.00</b></div>
-                <div class="mock-line"><span>Rye flour, stone ground</span><b>$9.60</b></div>
-                <div class="mock-line mock-sum"><span>Total due</span><b class="order-total">$52.06</b></div>
-                <div class="mock-pay">Complete purchase</div>
-                <div class="mock-error js-error">Payment gateway timeout (504). Your card was not charged.<span class="mock-ring js-ring"></span></div>
-              </div>
-
-              <div class="mock-fab js-fab">Get support</div>
-
-              <div class="mock-panel js-panel">
-                <div class="mock-panel-head">Report an issue</div>
-                <div class="js-form">
-                  <div class="mock-field">What went wrong?</div>
-                  <div class="mock-field mock-field-2">Complete purchase spins forever on checkout.</div>
-                  <div class="mock-send">Start session</div>
-                </div>
-                <div class="mock-chat js-chat">
-                  <div class="msg them">Hi — checkout keeps timing out for me.</div>
-                  <div class="msg you js-reply-1">Found it. That button double-fires on a retry.</div>
-                  <div class="msg sys js-reply-2">Refund issued — back on your card in 3 days.</div>
-                </div>
-              </div>
-
-            </div>
+    <div class="story" id="story" data-step="0" data-side="customer">
+      <div class="stage" id="story-stage">
+        <div class="frame">
+          <div class="frame-bar">
+            <span class="dots"><i style="background:#ff5f57"></i><i style="background:#febc2e"></i><i style="background:#28c840"></i></span>
+            <span class="url" id="story-url">shop.sunnybakery.example/checkout</span>
+            <span class="tag" id="story-tag">Customer’s tab</span>
           </div>
-        </div>
 
-        <!-- --------------------------- the agent --------------------------- -->
-        <div class="story-pane">
-          <div class="frame">
-            <div class="frame-bar">
-              <span class="dots"><i style="background:#ff5f57"></i><i style="background:#febc2e"></i><i style="background:#28c840"></i></span>
-              <span class="url" id="story-url">#support — where your team already works</span>
-              <span class="tag" id="story-tag">Your team</span>
-            </div>
-            <div class="screen mock-agent">
-              <div class="chat-bg" aria-hidden="true">
-                <div class="chat-bg-head">#support</div>
-                <div class="chat-bg-row"></div>
-                <div class="chat-bg-row short"></div>
-                <div class="chat-bg-note js-idle">No open reports</div>
-              </div>
-              <div class="notice js-notice">
-                <div class="notice-head"><span class="notice-chan">#support</span><span>just now</span></div>
-                <div class="notice-row"><span class="notice-app">SupportLayer</span> new report · <b>blocking</b></div>
-                <div class="notice-quote">“Complete purchase spins forever on checkout.”</div>
-                <div class="notice-snap"><span class="notice-snap-tag">snapshot</span><span class="notice-redact"></span></div>
-                <div class="notice-cta">Open the live session ↗</div>
-              </div>
-              <div class="session js-session">
-                <div class="session-screen">
-                  <div class="skel w70"></div>
-                  <div class="skel w90"></div>
-                  <div class="skel skel-err">Payment gateway timeout (504)</div>
-                  <div class="skel w50"></div>
-                  <span class="session-spot js-session-spot"></span>
+          <div class="viewport">
+
+            <!-- --------------- what the customer sees --------------- -->
+            <div class="view view-customer js-view-customer">
+              <div class="mock-app">
+                <div class="mock-nav"><span class="mock-logo"></span> Sunny Bakery <span class="mock-cart">Cart · 3</span></div>
+                <div class="mock-body">
+                  <h4>Checkout</h4>
+                  <div class="mock-line"><span>Sourdough starter kit</span><b>$32.00</b></div>
+                  <div class="mock-line"><span>Rye flour, stone ground</span><b>$9.60</b></div>
+                  <div class="mock-line"><span>Shipping</span><b>Free</b></div>
+                  <div class="mock-line mock-sum"><span>Total due</span><b class="order-total">$52.06</b></div>
+                  <div class="mock-pay">Complete purchase</div>
+                  <div class="mock-error js-error">Payment gateway timeout (504). Your card was not charged.<span class="mock-ring js-ring"></span></div>
+                  <div class="mock-foot">Billing address · 14 Rowan St, Portland OR</div>
                 </div>
-                <div class="session-dock">
-                  <span class="dock-tool on">Point</span>
-                  <span class="dock-tool">Draw</span>
-                  <span class="dock-tool">Type</span>
-                  <span class="dock-gap"></span>
-                  <span class="dock-b">Chat</span>
-                  <span class="dock-b">End</span>
+
+                <div class="mock-fab js-fab">Get support</div>
+
+                <div class="mock-panel js-panel">
+                  <div class="mock-panel-head">Report an issue</div>
+                  <div class="js-form">
+                    <div class="mock-field">What went wrong?</div>
+                    <div class="mock-field mock-field-2">Complete purchase spins forever.</div>
+                    <div class="mock-redact js-redact"><i class="fas fa-eye-slash"></i> Card, email and tax ID blurred before capture</div>
+                    <div class="mock-send">Start session</div>
+                  </div>
+                  <div class="mock-chat js-chat">
+                    <div class="msg them">Hi — checkout keeps timing out for me.</div>
+                    <div class="msg you js-reply-1">Found it. That button double-fires on a retry.</div>
+                    <div class="msg sys js-reply-2">Refund issued — back on your card in 3 days.</div>
+                  </div>
+                </div>
+
+                <div class="mock-incoming js-incoming">Your agent just highlighted something</div>
+              </div>
+            </div>
+
+            <!-- ----------------- what the agent sees ----------------- -->
+            <div class="view view-agent js-view-agent">
+              <div class="mock-agent">
+                <div class="chat-bg" aria-hidden="true">
+                  <div class="chat-bg-head">#support</div>
+                  <div class="chat-bg-row"></div>
+                  <div class="chat-bg-row short"></div>
+                  <div class="chat-bg-note js-idle">No open reports</div>
+                </div>
+
+                <div class="notice js-notice">
+                  <div class="notice-head"><span class="notice-chan">#support</span><span>just now</span></div>
+                  <div class="notice-row"><span class="notice-app">SupportLayer</span> new report · <b>blocking</b></div>
+                  <div class="notice-quote">“Complete purchase spins forever.”</div>
+                  <div class="notice-snap"><span class="notice-snap-tag">snapshot</span><span class="notice-redact"></span></div>
+                  <div class="notice-cta">Open the live session ↗</div>
+                </div>
+
+                <div class="session js-session">
+                  <div class="session-screen">
+                    <div class="skel w70"></div>
+                    <div class="skel w90"></div>
+                    <div class="skel skel-err">Payment gateway timeout (504)</div>
+                    <div class="skel w50"></div>
+                    <span class="session-spot js-session-spot"></span>
+                  </div>
+                  <div class="session-dock">
+                    <span class="dock-tool on">Point</span>
+                    <span class="dock-tool">Draw</span>
+                    <span class="dock-tool">Type</span>
+                    <span class="dock-gap"></span>
+                    <span class="dock-b">Chat</span>
+                    <span class="dock-b">End</span>
+                  </div>
                 </div>
               </div>
             </div>
@@ -461,15 +483,21 @@
       </div>
 
       <div class="story-rail">
+        <div class="rail-head">
+          <span class="feature js-feature">One script tag</span>
+          <span class="spacer"></span>
+          <ol class="progress" id="story-progress" aria-hidden="true"></ol>
+          <button class="mini-btn" id="story-replay" type="button"><i class="fas fa-rotate-right fa-redo"></i> Replay</button>
+        </div>
         <ol class="story-captions" id="story-captions">
-          <li>Checkout looks fine. Then the payment gateway times out.</li>
-          <li>The customer asks for help without leaving the page they're on.</li>
-          <li>They describe it. Redaction runs locally, before anything is captured or sent.</li>
-          <li>The report lands where your team already works — with a redacted snapshot, not in a new dashboard.</li>
-          <li>Your agent opens the link: same URL, so same page, with a dock on top.</li>
-          <li>Point, draw, hand over text — then it's sorted. No handshake, no second app.</li>
+          <li>A normal checkout — with one script tag on it. Nothing else to install.</li>
+          <li>The payment fails. They ask for help without leaving the page they're on.</li>
+          <li>They describe it. Redaction runs on the page, before anything is captured or sent.</li>
+          <li>The report lands where your team already works — your webhook, with a redacted snapshot.</li>
+          <li>Your agent opens the link. It's the same URL, so it's the same page, dock and all.</li>
+          <li>Point, draw, hand over text — and it lands live on the customer's own screen.</li>
+          <li>Sorted, in one tab. No screen-share handshake, no second app.</li>
         </ol>
-        <button class="mini-btn" id="story-replay" type="button"><i class="fas fa-rotate-right fa-redo"></i> Replay</button>
       </div>
     </div>
   </div>
@@ -631,20 +659,26 @@ https://app.domain.com/checkout
   /* ============================ the storyboard ============================
    * A scripted animation, not a toy. It plays itself once the section scrolls into
    * view and can be replayed; nothing here needs a visitor to follow instructions.
-   * Each step is a pure DOM state, so the suite asserts on `data-step` and classes
-   * rather than on animation timing. */
+   *
+   * There is one window, not two side by side: the story CUTS between the customer's
+   * view and the agent's view, so each beat is seen from the side that experiences it.
+   * Every step is pure DOM state, so the suite asserts on `data-step`, `data-side` and
+   * classes rather than on animation timing. */
   (function storyboard() {
     var story = document.getElementById("story");
     if (!story) return;
 
+    /* side decides which view is on screen; feature is the one-line claim for that beat. */
     var steps = [
-      { hold: 1500 },
-      { hold: 1900 },
-      { hold: 1900 },
-      { hold: 2300 },
-      { hold: 2100 },
-      { hold: 0 }
+      { side: "customer", feature: "One script tag", hold: 1900 },
+      { side: "customer", feature: "Help from the page itself", hold: 2000 },
+      { side: "customer", feature: "Redacted before capture", hold: 2400 },
+      { side: "agent", feature: "Lands on your own webhook", hold: 2600 },
+      { side: "agent", feature: "Same page, agent role", hold: 2400 },
+      { side: "customer", feature: "Point · draw · hand over text", hold: 2600 },
+      { side: "customer", feature: "Peer to peer, no relay", hold: 0 }
     ];
+    var CUSTOMER_URL = "shop.sunnybakery.example/checkout";
     var last = steps.length - 1;
     var timers = [];
     var current = 0;
@@ -661,44 +695,62 @@ https://app.domain.com/checkout
       fab: pick(".js-fab"),
       panel: pick(".js-panel"),
       form: pick(".js-form"),
+      redact: pick(".js-redact"),
       chat: pick(".js-chat"),
       notice: pick(".js-notice"),
       session: pick(".js-session"),
       sessionSpot: pick(".js-session-spot"),
       ring: pick(".js-ring"),
+      incoming: pick(".js-incoming"),
       reply1: pick(".js-reply-1"),
       reply2: pick(".js-reply-2"),
-      url: pick("#story-url"),
-      tag: pick("#story-tag"),
       idle: pick(".js-idle")
     };
+    var viewCustomer = story.querySelector(".js-view-customer");
+    var viewAgent = story.querySelector(".js-view-agent");
+    var urlEl = document.getElementById("story-url");
+    var tagEl = document.getElementById("story-tag");
+    var featureEl = story.querySelector(".js-feature");
     var captions = Array.prototype.slice.call(story.querySelectorAll(".story-captions li"));
+
+    var progress = document.getElementById("story-progress");
+    var dots = steps.map(function () {
+      var li = document.createElement("li");
+      if (progress) progress.appendChild(li);
+      return li;
+    });
 
     function render(n) {
       current = n;
+      var s = steps[n];
       story.setAttribute("data-step", String(n));
+      story.setAttribute("data-side", s.side);
 
       Object.keys(el).forEach(function (k) { clear(el[k]); });
 
+      if (viewCustomer) viewCustomer.classList.toggle("on", s.side === "customer");
+      if (viewAgent) viewAgent.classList.toggle("on", s.side === "agent");
       captions.forEach(function (li, i) { li.classList.toggle("on", i === n); });
+      dots.forEach(function (d, i) { d.className = i === n ? "on" : i < n ? "done" : ""; });
+      if (featureEl) featureEl.textContent = s.feature;
+      if (urlEl) urlEl.textContent = s.side === "agent" && n >= 4 ? CUSTOMER_URL + "?sl_role=agent" : s.side === "agent" ? "#support — where your team already works" : CUSTOMER_URL;
+      if (tagEl) tagEl.textContent = s.side === "agent" ? (n >= 4 ? "Same URL · agent role" : "Your team") : "Customer’s tab";
 
       var on = function (list) { list.forEach(function (e) { e.classList.add("on"); }); };
 
+      // Customer's view
       if (n >= 1) on(el.error);
+      if (n >= 1) on(el.fab);
       if (n === 1) el.fab.forEach(function (e) { e.classList.add("pulse"); });
       if (n >= 2) { on(el.panel); el.fab.forEach(function (e) { e.classList.add("off"); }); }
-      if (n === 2) on(el.form);
-      if (n >= 3) on(el.chat);
-      if (n >= 3 && n < 4) on(el.notice);
-      if (n >= 3) el.idle.forEach(function (e) { e.classList.add("off"); });
-      if (n >= 4) on(el.session);
-      if (n >= 5) { on(el.ring); on(el.sessionSpot); on(el.reply1); on(el.reply2); }
+      if (n === 2) { on(el.form); on(el.redact); }
+      if (n >= 5) { on(el.ring); on(el.chat); on(el.incoming); on(el.reply1); }
+      if (n >= 6) on(el.reply2);
 
-      // The agent's chrome changes meaning when they arrive at the customer's page.
-      el.url.forEach(function (e) {
-        e.textContent = n >= 4 ? "shop.sunnybakery.example/checkout?sl_role=agent" : "#support — where your team already works";
-      });
-      el.tag.forEach(function (e) { e.textContent = n >= 4 ? "Same URL · agent role" : "Your team"; });
+      // Agent's view
+      if (n === 3) on(el.notice);
+      if (n >= 3) el.idle.forEach(function (e) { e.classList.add("off"); });
+      if (n >= 4) { on(el.session); on(el.sessionSpot); }
     }
 
     function stop() {

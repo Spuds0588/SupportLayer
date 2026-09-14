@@ -231,22 +231,105 @@ async function main() {
 
     const storyShell = await home.evaluate(() => {
       const s = document.getElementById("story");
+      const items = Array.from(s.querySelectorAll(".story-captions li"));
       return s
         ? {
-            captions: s.querySelectorAll(".story-captions li").length,
+            captions: items.length,
+            blankCaptions: items.filter((li) => !li.textContent.trim()).length,
+            steps: window.__story ? window.__story.last + 1 : null,
             replay: !!s.querySelector("#story-replay"),
             step: Number(s.getAttribute("data-step")),
           }
         : null;
     });
     check("the storyboard is on the page", !!storyShell, JSON.stringify(storyShell));
-    eq("the storyboard ships one caption per step", storyShell?.captions, 6);
+    eq("the storyboard can reach every step", storyShell?.steps, 7);
+    /* Asserted against the story's own step count, not a literal: the shipped storyboard had
+       seven steps and six captions, so its payoff frame cleared the caption line and sat there
+       blank — and a hardcoded 6 was holding that in place. */
+    eq("the storyboard ships one caption per step", storyShell?.captions, storyShell?.steps);
+    eq("no step is left without a caption", storyShell?.blankCaptions, 0);
     check("the storyboard offers a replay", storyShell?.replay);
+
+    /* The story is one window that cuts between perspectives. Read the whole state of a step,
+       so each assertion is about what that side is actually being shown. */
+    const storyState = () =>
+      home.evaluate(() => {
+        /* checkVisibility with opacityProperty is the honest oracle: a child can set
+           `visibility: visible` inside a hidden parent, and the cross-faded view keeps its
+           subtree at opacity 0. Reading only computed `visibility` reports the agent's
+           session as visible on the customer's side, which is not what a person sees. */
+        const vis = (sel) => {
+          const e = document.querySelector(sel);
+          if (!e) return false;
+          return e.checkVisibility({ opacityProperty: true, visibilityProperty: true });
+        };
+        const story = document.getElementById("story");
+        return {
+          step: Number(story.getAttribute("data-step")),
+          side: story.getAttribute("data-side"),
+          error: vis(".js-error"),
+          panel: vis(".js-panel"),
+          redact: vis(".js-redact"),
+          chat: vis(".js-chat"),
+          reply: vis(".js-reply-2"),
+          ring: vis(".js-ring"),
+          incoming: vis(".js-incoming"),
+          fab: vis(".js-fab"),
+          session: vis(".js-session"),
+          sessionSpot: vis(".js-session-spot"),
+          notice: vis(".js-notice"),
+          url: document.getElementById("story-url").textContent,
+          tag: document.getElementById("story-tag").textContent,
+          feature: document.querySelector(".js-feature").textContent,
+          activeCaptions: document.querySelectorAll(".story-captions li.on").length,
+          activeDots: document.querySelectorAll("#story-progress li.on").length,
+          dots: document.querySelectorAll("#story-progress li").length,
+        };
+      });
+
+    /* Let each beat come to rest before reading it. Sampling mid-transition reads a blend of
+       both perspectives — the two views cross-fade over 450ms and the redaction reveal lands
+       at 400ms — so a short wait would assert against an in-between frame. */
+    const SETTLE = 700;
+
+    // Every step the story can reach, so the perspective claim is checked, not assumed.
+    const sides = [];
+    for (let n = 0; n <= 6; n++) {
+      await home.evaluate((i) => window.__story.goto(i), n);
+      await sleep(SETTLE);
+      const s = await storyState();
+      sides.push(s.side);
+      if (n === 0) {
+        check("step 0 is a plainly normal checkout", s.side === "customer" && !s.fab && !s.error && !s.panel && !s.incoming, JSON.stringify(s));
+      }
+      if (n === 1) {
+        check("step 1 introduces the widget with the failure it exists for", s.side === "customer" && s.fab && s.error && !s.panel, JSON.stringify(s));
+      }
+      if (n === 2) {
+        check("step 2 shows the redaction, on the customer's side", s.side === "customer" && s.redact && s.panel, JSON.stringify(s));
+        check("the widget replaces the button rather than stacking on it", !s.fab, JSON.stringify(s));
+      }
+      if (n === 3) {
+        check("step 3 cuts to the agent to show the report arriving", s.side === "agent" && s.notice && !s.session, JSON.stringify(s));
+        check("the agent's beat never shows the customer's request panel", !s.panel && !s.error, JSON.stringify(s));
+      }
+      if (n === 4) {
+        check("step 4 keeps the agent's view and opens the session", s.side === "agent" && s.session && s.sessionSpot && !s.notice, JSON.stringify(s));
+        check("the agent's window is the customer's own URL in the agent role", /sl_role=agent/.test(s.url) && /agent role/.test(s.tag), `${s.url} / ${s.tag}`);
+      }
+      if (n === 5) {
+        check("step 5 cuts back to the customer to show the help landing", s.side === "customer" && s.ring && s.incoming && s.chat, JSON.stringify(s));
+        check("the agent's own chrome is not visible once the customer's side has settled", !s.session && !s.sessionSpot && !s.notice, JSON.stringify(s));
+      }
+    }
+    check("the story uses both perspectives", sides.includes("customer") && sides.includes("agent"), sides.join(","));
+    check("it cuts back and forth rather than sitting on one side", sides.join(",") === "customer,customer,customer,agent,agent,customer,customer", sides.join(","));
 
     // Play it the way a visitor does: scroll to it and let the observer start it.
     await shownInViewport(home, "#story");
     const reachedEnd = await waitFor(
-      () => home.evaluate(() => Number(document.getElementById("story").getAttribute("data-step")) === 5),
+      () => home.evaluate(() => Number(document.getElementById("story").getAttribute("data-step")) === 6),
       { timeout: 25000 }
     );
     check(
@@ -255,36 +338,15 @@ async function main() {
       `stopped at step ${await home.evaluate(() => document.getElementById("story").getAttribute("data-step"))}`
     );
 
-    const finalFrame = await home.evaluate(() => {
-      const vis = (sel) => {
-        const e = document.querySelector(sel);
-        if (!e) return false;
-        const cs = getComputedStyle(e);
-        return cs.display !== "none" && cs.visibility !== "hidden";
-      };
-      return {
-        error: vis(".js-error"),
-        chat: vis(".js-chat"),
-        reply: vis(".js-reply-2"),
-        ring: vis(".js-ring"),
-        session: vis(".js-session"),
-        sessionSpot: vis(".js-session-spot"),
-        notice: vis(".js-notice"),
-        url: document.getElementById("story-url").textContent,
-        tag: document.getElementById("story-tag").textContent,
-        active: document.querySelectorAll(".story-captions li.on").length,
-      };
-    });
-    check(
-      "the story ends with the agent on the customer's own URL",
-      finalFrame.session && /sl_role=agent/.test(finalFrame.url),
-      JSON.stringify(finalFrame)
-    );
-    check("the story ends with a highlighted error on the customer's screen", finalFrame.ring && finalFrame.error, JSON.stringify(finalFrame));
-    check("the story ends with the chat resolved", finalFrame.chat && finalFrame.reply, JSON.stringify(finalFrame));
-    check("the report card gives way to the session view", !finalFrame.notice && finalFrame.session && finalFrame.sessionSpot);
-    eq("exactly one caption is highlighted", finalFrame.active, 1);
-    check("the agent chrome switches to the customer's URL", /agent role/.test(finalFrame.tag), finalFrame.tag);
+    const finalFrame = await storyState();
+    check("the story ends on the customer's side", finalFrame.side === "customer", JSON.stringify(finalFrame));
+    check("it ends with the error highlighted on the customer's screen", finalFrame.ring && finalFrame.error, JSON.stringify(finalFrame));
+    check("it ends with the chat resolved", finalFrame.chat && finalFrame.reply, JSON.stringify(finalFrame));
+    check("the customer's chrome is back to their own URL", finalFrame.url === "shop.sunnybakery.example/checkout", finalFrame.url);
+    check("the feature line points at a real property", finalFrame.feature.length > 3, finalFrame.feature);
+    eq("exactly one caption is highlighted", finalFrame.activeCaptions, 1);
+    eq("exactly one progress dot is active", finalFrame.activeDots, 1);
+    eq("there is a progress dot per step", finalFrame.dots, 7);
 
     await clickSelector(home, "#story-replay");
     const rewound = await waitFor(
@@ -293,7 +355,7 @@ async function main() {
     );
     check("replay rewinds the story", rewound, `step ${await home.evaluate(() => document.getElementById("story").getAttribute("data-step"))}`);
     const endedAgain = await waitFor(
-      () => home.evaluate(() => Number(document.getElementById("story").getAttribute("data-step")) === 5),
+      () => home.evaluate(() => Number(document.getElementById("story").getAttribute("data-step")) === 6),
       { timeout: 25000 }
     );
     check("the replayed story reaches the same end", endedAgain);
@@ -756,8 +818,8 @@ async function main() {
     group("layout sanity (desktop)");
     const layout = await home.evaluate(() => {
       const box = document.querySelector(".box.is-standard");
-      const pane = document.querySelector(".story-pane .frame").getBoundingClientRect();
-      const screen = document.querySelector(".screen").getBoundingClientRect();
+      const stage = document.querySelector(".stage .frame").getBoundingClientRect();
+      const viewport = document.querySelector(".viewport").getBoundingClientRect();
       return {
         overflowX: document.documentElement.scrollWidth - window.innerWidth,
         heroFont: parseFloat(getComputedStyle(document.querySelector(".hero .title")).fontSize),
@@ -765,9 +827,8 @@ async function main() {
         floatingIcons: document.querySelectorAll(".floating-svg").length,
         faIcons: document.querySelectorAll("svg.svg-inline--fa").length,
         boxRadius: getComputedStyle(box).borderRadius,
-        storyColumns: getComputedStyle(document.querySelector(".story-grid")).gridTemplateColumns.split(" ").length,
-        paneW: Math.round(pane.width),
-        screenH: Math.round(screen.height),
+        stageW: Math.round(stage.width),
+        viewportH: Math.round(viewport.height),
       };
     });
     check("no horizontal overflow on desktop", layout.overflowX <= 1, `overflow=${layout.overflowX}px`);
@@ -776,9 +837,8 @@ async function main() {
     check("floating background icons were generated", layout.floatingIcons > 5, `${layout.floatingIcons}`);
     check("Font Awesome rendered its icons", layout.faIcons > 5, `${layout.faIcons} svg icons`);
     check("family styling is in effect (Bulma loaded)", layout.boxRadius !== "0px", layout.boxRadius);
-    check("the storyboard is two panes side by side on desktop", layout.storyColumns === 2, `${layout.storyColumns} columns`);
-    check("each story pane is a usable width", layout.paneW > 380, `${layout.paneW}px`);
-    check("the mock screens have real height", layout.screenH > 300, `${layout.screenH}px`);
+    check("the story is a single, centred window", layout.stageW > 600 && layout.stageW <= 800, `${layout.stageW}px`);
+    check("the story viewport has real height", layout.viewportH > 300, `${layout.viewportH}px`);
 
     group("customer app layout");
 
@@ -820,14 +880,12 @@ async function main() {
       overflowX: document.documentElement.scrollWidth - window.innerWidth,
       heroFont: parseFloat(getComputedStyle(document.querySelector(".hero .title")).fontSize),
       navWrap: getComputedStyle(document.querySelector(".nav-links")).position,
-      storyColumns: getComputedStyle(document.querySelector(".story-grid")).gridTemplateColumns.split(" ").length,
-      paneW: Math.round(document.querySelector(".story-pane .frame").getBoundingClientRect().width),
+      stageW: Math.round(document.querySelector(".stage .frame").getBoundingClientRect().width),
     }));
     check("no horizontal overflow on mobile", mobile.overflowX <= 1, `overflow=${mobile.overflowX}px`);
     check("hero scales down on mobile", mobile.heroFont < 40 && mobile.heroFont >= 20, `${mobile.heroFont}px`);
     eq("nav links drop into the flow on mobile", mobile.navWrap, "static");
-    check("the storyboard stacks to one column on mobile", mobile.storyColumns === 1, `${mobile.storyColumns} columns`);
-    check("the story pane fits the mobile viewport", mobile.paneW > 280 && mobile.paneW <= 390, `${mobile.paneW}px`);
+    check("the story window fits the mobile viewport", mobile.stageW > 280 && mobile.stageW <= 390, `${mobile.stageW}px`);
     if (HEADED) await home.screenshot({ path: path.join(SHOT_DIR, "mobile-headed.png") });
     await home.setViewport({ width: 1600, height: 1000 });
 

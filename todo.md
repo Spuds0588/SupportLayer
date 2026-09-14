@@ -3,7 +3,7 @@
 Status legend: `[x]` done, `[~]` in progress, `[ ]` not started.
 Mirrors PRD Part 3 plus the launch/hosting work.
 
-**v2 is built, published, and green: 142/142 end-to-end checks pass in headless and headed
+**v2 is built, published, and green: 171/171 end-to-end checks pass in headless and headed
 Chromium, locally *and* against the live GitHub Pages origin.** Live at
 https://spuds0588.github.io/SupportLayer/. Remaining work is the explicit backlog.
 
@@ -160,9 +160,10 @@ v2 collapsed the two-page design into one: the agent no longer has a page of the
 - [x] Removed the interactive demo from the homepage: two live iframes, nine control buttons, a payload
       inspector, live status chips, and a six-step tutorial. It asked a visitor to follow instructions
       before they had decided to care, and it duplicated `INTEGRATION.md`.
-- [x] Replaced it with `#story`, a scripted storyboard: a mock customer window and a mock agent window,
-      six steps, one caption each, and a Replay button. It starts on scroll via `IntersectionObserver`
-      and jumps to the finished story under `prefers-reduced-motion`.
+- [x] Replaced it with `#story`, a scripted storyboard: seven steps, one caption each, and a Replay button.
+      It starts on scroll via `IntersectionObserver` and jumps to the finished story under
+      `prefers-reduced-motion`. *(Its two side-by-side windows became one perspective-cutting stage in
+      Phase 13.)*
 - [x] The story shows the report arriving **where the team already works** (a channel card with the
       redacted snapshot), not in a bespoke support dashboard — which is how a solo founder would wire
       an MVP. Then the agent joins the customer's own URL and annotates it.
@@ -175,6 +176,25 @@ v2 collapsed the two-page design into one: the agent no longer has a page of the
       bar's nowrap URL — 466px of frame inside a 358px column on a 390px phone.
 - [x] Suite 142 → 157 checks: the storyboard plays itself to the end, replays deterministically,
       ends on the customer's own URL, and stacks to one column on mobile.
+
+## Phase 13 — One stage, two perspectives  ✅ done
+- [x] Stopped showing the demo as two windows side by side: the stage now **cuts between the customer's view
+      and the agent's**, so each beat is seen from the side that experiences it — the report arriving in the
+      agent's channel, then the highlight landing on the customer's own screen. `data-side` says which is live.
+- [x] Found a latent bug the old suite had pinned in place: seven steps but only six captions, so the payoff
+      frame cleared the caption line and sat there blank. Both are seven now.
+- [x] The cut is a cross-fade between two stacked layers, so the reader's eye stays in one place while the
+      perspective changes underneath it.
+- [x] Fixed two real bugs found by reading the frames: the punchline toast ("Your agent just highlighted
+      something") and the `Get support` button were painted in **frame one**, before there was any agent — both
+      now belong to the beat that earns them. Also wired up `.js-redact`, whose `.on` class no hook was styled
+      for, and gave the reveal a beat of its own.
+- [x] Suite 157 → 171 checks. The visibility oracle is now `checkVisibility({ opacityProperty: true })`: the old
+      computed-style read reported the agent's chrome as visible on the customer's side, because a child can set
+      `visibility: visible` inside a parent that is cross-faded to `opacity: 0`. The captions are now asserted
+      against the story's own step count rather than a literal, so a step without a caption fails.
+- [x] Steps are read only after they settle (700ms), since the views cross-fade over 450ms and the redaction
+      reveal lands at 400ms — a short wait was asserting against a frame that lasts half a second.
 
 ## Backlog (explicitly not in v2)
 - [ ] Multiparty sessions / multiple agents per session.

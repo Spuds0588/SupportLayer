@@ -313,3 +313,40 @@ its session there, so the reload/resume test silently lost its session. A real p
 it, and the reason is now written down where the next person will look.
 
 **Suite: 142 → 157 checks.** Green headless and headed, locally and against the deployed origin.
+
+## 2026-09-14 — Session 6: one stage, two perspectives
+
+**The demo was telling the story twice at once.** The storyboard shipped as two windows side by side, so a
+visitor read the customer's checkout and the agent's channel simultaneously and had to work out which one to
+look at. The story is sequential — they ask, it arrives, they answer — and a side-by-side layout argues the
+opposite: that the interesting thing is the comparison.
+
+**It is now one window that cuts between the two sides.** `data-side` says which perspective is live; the two
+views are stacked layers that cross-fade, so the reader's eye stays in one place while the perspective changes
+underneath it. The report arrives in the agent's channel (a simulated notification in `#support`, which is how
+a solo founder would actually wire an MVP — not a bespoke support dashboard), then the stage cuts back to the
+customer for the highlight landing on their own screen.
+
+**The last beat had no caption at all.** The previous storyboard defined seven steps but shipped six captions, so
+its final frame — the payoff — cleared the caption line and sat there blank. The suite asserted `captions === 6`
+from the other side, which pinned the bug in place instead of catching it. Both are seven now, and the two are
+asserted together.
+
+**Two bugs were painted into frame one.** Reading the live frames rather than trusting the step machine turned
+up the punchline toast — *"Your agent just highlighted something"* — and the `Get support` button visible in
+step 0, before there was any agent or any failure. Both were `position: absolute` elements with no hidden
+state, so they were simply always on. They now belong to the beat that earns them; the FAB pulses in when the
+payment fails and the widget replaces it. `.js-redact` had the same shape of problem in reverse: its `.on`
+class was set by the driver but no CSS rule styled it, so the redaction beat had no reveal.
+
+**The suite's visibility oracle was lying.** A child can set `visibility: visible` inside a parent that is
+cross-faded to `opacity: 0`, and computed style reports exactly that — so the assertion "the agent's own chrome
+is not visible on the customer's side" passed against a frame where it *was* visible, and would have kept
+passing. It now uses `checkVisibility({ opacityProperty: true, visibilityProperty: true })`, which accounts for
+the whole ancestor chain. Steps are also read only after they settle: the views cross-fade over 450ms and the
+redaction reveal lands at 400ms, so the old 120ms sample was asserting against an in-between frame that exists
+for half a second. **Suite 157 → 171 checks.**
+
+**Cosmetic fixes the screenshots asked for:** the feature chip wrapped onto two lines next to the progress dots
+(nowrap + `flex: none`), and the mock checkout was thin enough to look half-built, so it gained a shipping row
+and a billing line.

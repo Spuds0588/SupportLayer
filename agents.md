@@ -13,8 +13,9 @@ dependencies, no framework.
   the request button. Do not reintroduce a second HTML deliverable.
 - `index.html` — landing page: a pitch, a **scripted storyboard** (`.story`), and a pointer at
   `INTEGRATION.md`. Deliberately *not* the configuration reference and deliberately *not* an
-  interactive demo. The MailLayer and PhoneLayer scripts are still loaded, but only one quiet
-  footer line names the sister projects.
+  interactive demo. The MailLayer and PhoneLayer scripts are still loaded — a `mailto:` or `tel:`
+  link on the page still gets upgraded, silently — but only one quiet footer line names the sister
+  projects (MailLayer, PhoneLayer, ZipLayer; ZipLayer is a link, not a script).
 - `room.html` — dev fixture: `demo-app.html` loaded twice, once per role, for manual and automated
   two-role runs. See “Two roles, one document” below.
 - `test.html` — integration harness: loads the widget in every mode against a local
@@ -133,17 +134,26 @@ loopback bus.
 `index.html` used to embed the widget twice and hand the visitor a control panel to drive it. That made the
 landing page a worse copy of this repository: it carried a payload inspector, live status chips, four control
 buttons, and a six-step tutorial, and it put a `getDisplayMedia`-shaped chore in front of someone who had not
-decided to care yet.
-
-Now the homepage **sells** and the demo **plays**. `#story` is a scripted storyboard — a mock customer window
-and a mock agent window whose states are driven by a single `data-step` attribute, with one caption per step
-and a Replay button. It starts itself via `IntersectionObserver` when scrolled into view, and jumps straight to
-the finished story under `prefers-reduced-motion`.
+decided to care yet.Now the homepage **sells** and the demo **plays**. `#story` is a scripted storyboard whose states are driven by
+a single `data-step` attribute, with one caption per step and a Replay button. It starts itself via
+`IntersectionObserver` when scrolled into view, and jumps straight to the finished story under
+`prefers-reduced-motion`.
 
 Rules for it:
 
-- **Every step is a pure DOM state**, so the suite asserts on `data-step` and on `.on` classes, never on
-timing. `window.__story` (`play`, `goto`, `step`, `last`) is the test seam — do not remove it.
+- **One stage, two perspectives.** There is a single window; the story *cuts* between the customer's view and
+the agent's view so each beat is seen from the side that experiences it. The two views are stacked layers that
+cross-fade, and `data-side` says which one is live. **Do not go back to two windows side by side** — that
+splits the reader's attention and reads as a comparison chart rather than a story.
+- **Every step is a pure DOM state**, so the suite asserts on `data-step`, on `data-side` and on `.on` classes,
+  never on timing. `window.__story` (`play`, `goto`, `step`, `last`) is the test seam — do not remove it.
+- **Read visibility with `checkVisibility({ opacityProperty: true, visibilityProperty: true })`**, not with
+  computed `visibility`. A child can set `visibility: visible` inside a hidden parent, and the inactive
+  perspective keeps its subtree at `opacity: 0` — so reading computed style reports the agent's session as
+  visible on the customer's side, which is not what anyone sees.
+- **Let a beat settle before asserting on it** (`SETTLE` in the suite). The views cross-fade over 450ms and the
+  redaction reveal lands at 400ms, so a short wait samples an in-between frame and fails on a frame that
+  exists for less than half a second.
 - Anything that must stop occupying layout when hidden uses `display`, not `visibility`. Visibility hides the
   paint but keeps the box, which silently padded the widget panel and left gaps in the chat.
 - Overlay-only pieces (the report card, the session view, the pointer, the highlight) are absolutely
@@ -168,11 +178,12 @@ reload/resume path silently dies. The suite loads `room.html` over HTTP for exac
 ## Testing
 
 - `npm start` then `node tests/e2e.mjs` (headless) or `node tests/e2e.mjs --headed`.
-- The suite must stay green in **both** modes on every change: 157 checks cover config parsing, the request flow,
+- The suite must stay green in **both** modes on every change: 171 checks cover config parsing, the request flow,
   redaction round-trips, coordinate accuracy (±12px), drawing auto-clear, directed typing, reload/resume, teardown,
-  the homepage storyboard (it plays itself to the end, replays, and stacks on mobile), the two-role room, the
-  harness assertions, and desktop/mobile layout. Headed runs have historically caught bugs headless missed
-  (a loopback timer firing after teardown, the always-visible draw hint).
+  the homepage storyboard (it plays itself to the end, cuts `customer,customer,customer,agent,agent,customer,
+  customer`, replays, and stacks on mobile), the two-role room, the mode matrix, the harness assertions, and
+  desktop/mobile layout. Headed runs have historically caught bugs headless missed (a loopback timer firing after
+  teardown, the always-visible draw hint).
 - **Idle pages must show zero agent chrome.** The overlay elements (`canvas.sl-draw`,
   `.sl-laser`, `.sl-draw-hint`, `.sl-typing`) all default to hidden and are only revealed
   while an agent command is live; the layout test asserts this on an idle page.

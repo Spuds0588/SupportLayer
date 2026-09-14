@@ -13,8 +13,9 @@ is the whole product, and the agent experience is that same script running in a 
 
 The homepage opens with a short **animated walkthrough**: a customer's checkout fails, they ask for help from the
 page itself, the report lands in a channel your team already reads, and an agent joins them on that same URL to
-point and draw. Nothing to drive, nothing to install. To run both roles side by side for real, open
-[`room.html`](https://spuds0588.github.io/SupportLayer/room.html).
+point and draw. The stage **cuts between the customer's view and the agent's** as the story moves, so you see each
+side of the session as it happens rather than comparing two windows. Nothing to drive, nothing to install. To run
+both roles side by side for real, open [`room.html`](https://spuds0588.github.io/SupportLayer/room.html).
 
 | | |
 | --- | --- |
@@ -165,17 +166,18 @@ reported window geometry. Pixels never cross the wire.
 npm start            # zero-dependency static server on http://127.0.0.1:4174
 npm test             # headless Chromium end-to-end suite
 npm run test:headed  # same suite with a visible window (real rendering + input)
-npm run test:live    # the same 119 checks against the deployed GitHub Pages site
+npm run test:live    # the same 171 checks against the deployed GitHub Pages site
 ```
 
-The suite boots the server itself, drives the simulated demo end to end (request → redaction → webhook payload →
-customer and agent frames joining the same page → chat → laser/draw/type → reload/resume → teardown), runs the
-in-page assertions in `test.html`, and fails on any console error, uncaught exception, or broken same-origin request.
+The suite boots the server itself, plays the homepage storyboard step by step (asserting which perspective is live
+at each beat), drives the two-role fixture end to end (request → redaction → webhook payload → customer and agent
+frames joining the same page → chat → laser/draw/type → reload/resume → teardown), runs the in-page assertions in
+`test.html`, and fails on any console error, uncaught exception, or broken same-origin request.
 It also asserts layout invariants — the FAB inside the customer viewport, the agent dock above the stage floor,
 toast and coach line clearing the dock — so a CSS regression fails the build instead of surviving as a bad screenshot.
 
 `test:live` passes `--base <url>` (equivalently `SL_BASE`) so the identical suite runs against a deployed origin —
-the same 119 checks pass against `https://spuds0588.github.io/SupportLayer/`, which is how the published page is
+the same 171 checks pass against `https://spuds0588.github.io/SupportLayer/`, which is how the published page is
 verified rather than assumed.
 
 ## Repository layout
@@ -183,7 +185,7 @@ verified rather than assumed.
 | File | Role |
 | --- | --- |
 | `supportlayer.js` | The product — both roles. Vanilla JS IIFE, one global, zero dependencies. |
-| `index.html` | Landing page: the pitch, plus a self-playing storyboard instead of an interactive demo. |
+| `index.html` | Landing page: the pitch, plus a self-playing storyboard that cuts between the two perspectives. |
 | `demo-app.html` | The simulated customer app, loaded in both roles by `room.html`. |
 | `room.html` | Dev fixture: the same page twice, customer and agent, for manual and automated two-role runs. |
 | `test.html` | Integration harness with in-page assertions. |
