@@ -218,18 +218,103 @@ async function main() {
   });
 
   try {
-    /* ============================= landing page demo ============================= */
-    const page = await browser.newPage();
-    watch(page, "index");
-    await page.goto(`${BASE}/index.html`, { waitUntil: "domcontentloaded" });
+    /* ============================= homepage =============================
+     * The landing page is a pitch plus a scripted animation; it no longer embeds the widget,
+     * so it gets its own page and its own group. */
+    const home = await browser.newPage();
+    watch(home, "index");
+    await home.goto(`${BASE}/index.html`, { waitUntil: "domcontentloaded" });
 
-    group("landing page");
-    check("page title mentions SupportLayer", (await page.title()).includes("SupportLayer"));
+    group("homepage");
+    check("page title mentions SupportLayer", (await home.title()).includes("SupportLayer"));
+    eq("the homepage no longer embeds the widget in frames", (await home.$$("iframe")).length, 0);
+
+    const storyShell = await home.evaluate(() => {
+      const s = document.getElementById("story");
+      return s
+        ? {
+            captions: s.querySelectorAll(".story-captions li").length,
+            replay: !!s.querySelector("#story-replay"),
+            step: Number(s.getAttribute("data-step")),
+          }
+        : null;
+    });
+    check("the storyboard is on the page", !!storyShell, JSON.stringify(storyShell));
+    eq("the storyboard ships one caption per step", storyShell?.captions, 6);
+    check("the storyboard offers a replay", storyShell?.replay);
+
+    // Play it the way a visitor does: scroll to it and let the observer start it.
+    await shownInViewport(home, "#story");
+    const reachedEnd = await waitFor(
+      () => home.evaluate(() => Number(document.getElementById("story").getAttribute("data-step")) === 5),
+      { timeout: 25000 }
+    );
+    check(
+      "the story plays itself to the end with no input",
+      reachedEnd,
+      `stopped at step ${await home.evaluate(() => document.getElementById("story").getAttribute("data-step"))}`
+    );
+
+    const finalFrame = await home.evaluate(() => {
+      const vis = (sel) => {
+        const e = document.querySelector(sel);
+        if (!e) return false;
+        const cs = getComputedStyle(e);
+        return cs.display !== "none" && cs.visibility !== "hidden";
+      };
+      return {
+        error: vis(".js-error"),
+        chat: vis(".js-chat"),
+        reply: vis(".js-reply-2"),
+        ring: vis(".js-ring"),
+        session: vis(".js-session"),
+        sessionSpot: vis(".js-session-spot"),
+        notice: vis(".js-notice"),
+        url: document.getElementById("story-url").textContent,
+        tag: document.getElementById("story-tag").textContent,
+        active: document.querySelectorAll(".story-captions li.on").length,
+      };
+    });
+    check(
+      "the story ends with the agent on the customer's own URL",
+      finalFrame.session && /sl_role=agent/.test(finalFrame.url),
+      JSON.stringify(finalFrame)
+    );
+    check("the story ends with a highlighted error on the customer's screen", finalFrame.ring && finalFrame.error, JSON.stringify(finalFrame));
+    check("the story ends with the chat resolved", finalFrame.chat && finalFrame.reply, JSON.stringify(finalFrame));
+    check("the report card gives way to the session view", !finalFrame.notice && finalFrame.session && finalFrame.sessionSpot);
+    eq("exactly one caption is highlighted", finalFrame.active, 1);
+    check("the agent chrome switches to the customer's URL", /agent role/.test(finalFrame.tag), finalFrame.tag);
+
+    await clickSelector(home, "#story-replay");
+    const rewound = await waitFor(
+      () => home.evaluate(() => Number(document.getElementById("story").getAttribute("data-step")) <= 1),
+      { timeout: 5000 }
+    );
+    check("replay rewinds the story", rewound, `step ${await home.evaluate(() => document.getElementById("story").getAttribute("data-step"))}`);
+    const endedAgain = await waitFor(
+      () => home.evaluate(() => Number(document.getElementById("story").getAttribute("data-step")) === 5),
+      { timeout: 25000 }
+    );
+    check("the replayed story reaches the same end", endedAgain);
+
+    await home.screenshot({ path: path.join(SHOT_DIR, `landing-${HEADED ? "headed" : "headless"}.png`), fullPage: false });
+
+    /* ============================= two roles, one document =============================
+     * The interaction tests bring their own room — the same page loaded twice, customer and
+     * agent — so they exercise the widget rather than the marketing page's markup. */
+    const page = await browser.newPage();
+    watch(page, "room");
+    // A real page on the real origin, not `setContent`: an `about:blank` top frame gives the
+    // frames an opaque storage context, and the widget cannot read its own session there.
+    await page.goto(`${BASE}/room.html`, { waitUntil: "domcontentloaded" });
     const customerFrame = await page.waitForFrame((f) => f.url().includes("demo-app.html") && !f.url().includes("sl_role"), { timeout: 10000 });
     const agentFrame = await page.waitForFrame((f) => f.url().includes("sl_role=agent"), { timeout: 10000 });
-    check("customer demo frame loaded", !!customerFrame);
-    check("agent frame is the same page in the agent role", !!agentFrame);
-    check("both frames are the same document, not a second app", customerFrame.url().split("?")[0] === agentFrame.url().split("?")[0]);
+
+    group("two roles, one document");
+    check("the customer frame loaded", !!customerFrame);
+    check("the agent frame is the same document with a role param", !!agentFrame);
+    eq("and it is literally the same file", agentFrame.url().split("?")[0], customerFrame.url().split("?")[0]);
 
     const widgetReady = await waitFor(() => customerFrame.evaluate(() => !!(window.SupportLayer && window.SupportLayer.config)));
     check("widget booted inside the customer frame", widgetReady);
@@ -281,7 +366,7 @@ async function main() {
 
     /* ---------- open the widget ---------- */
     group("request flow");
-    await clickSelector(page, "#btn-widget");
+    await clickIn(page, customerFrame, ".sl-fab", { frameSelector: "#customer-frame" });
     const panelOpen = await waitFor(() =>
       customerFrame.evaluate(() => {
         const root = document.querySelector("#supportlayer-root");
@@ -308,18 +393,23 @@ async function main() {
 
     const submitBox = await boxIn(customerFrame, "button[type=submit]");
     check("submit button is inside the visible frame", !!submitBox && submitBox.width > 10, JSON.stringify(submitBox));
+    // Capture the payload from the widget's own public event rather than a page-level inspector.
+    await customerFrame.evaluate(() => {
+      window.__payloads = [];
+      window.addEventListener("supportlayer:webhook", (e) => window.__payloads.push(e.detail));
+    });
     await clickIn(page, customerFrame, "button[type=submit]");
 
-    const delivered = await waitFor(async () => {
-      const chip = await page.$eval("#chip-events b", (el) => Number(el.textContent));
-      return chip > 0;
-    }, { timeout: 10000 });
-    check("webhook payload reached the inspector", delivered);
+    const delivered = await waitFor(
+      () => customerFrame.evaluate(() => (window.__payloads || []).length > 0),
+      { timeout: 10000 }
+    );
+    check("the widget emitted its webhook payload", delivered);
 
-    const payload = await page.evaluate(() => {
-      const text = document.querySelector("#payload").textContent.split("\n").filter((l) => !l.trim().startsWith("//")).join("\n");
-      const parsed = JSON.parse(text);
-      return { parsed, snapshotSrc: document.querySelector("#snapshot-img").src.slice(0, 30), snapshotVisible: document.querySelector("#snapshot-img").classList.contains("show") };
+    const payload = await customerFrame.evaluate(() => {
+      const p = (window.__payloads || [])[0] || null;
+      const snap = String((p && p.snapshot) || "");
+      return { parsed: p, snapshotSrc: snap.slice(0, 30), snapshotIsJpeg: snap.indexOf("data:image/jpeg") === 0, snapshotLen: snap.length };
     });
     eq("event_type is support_request", payload.parsed.event_type, "support_request");
     eq("status is open", payload.parsed.status, "open");
@@ -334,7 +424,7 @@ async function main() {
       payload.parsed.live_session_url
     );
     check("snapshot is a JPEG data URL", payload.snapshotSrc.startsWith("data:image/jpeg"), payload.snapshotSrc);
-    check("snapshot preview is shown in the inspector", payload.snapshotVisible);
+    check("snapshot carries real pixels, not an empty frame", payload.snapshotLen > 500, `${payload.snapshotLen} chars`);
 
     /* ---------- privacy ---------- */
     group("privacy redaction");
@@ -363,7 +453,10 @@ async function main() {
 
     /* ---------- agent connects over the loopback bus ---------- */
     group("live session");
-    const connected = await waitFor(async () => (await page.$eval("#chip-agent b", (el) => el.textContent)) === "connected", { timeout: 12000 });
+    const connected = await waitFor(
+      () => agentFrame.evaluate(() => !!(window.SupportLayer && window.SupportLayer.agent && window.SupportLayer.agent.state().connected)),
+      { timeout: 12000 }
+    );
     check("the agent joined the session on its own", connected);
     const customerConnected = await waitFor(() => customerFrame.evaluate(() => window.SupportLayer.getState() === "CONNECTED"), { timeout: 8000 });
     check("customer state is CONNECTED", customerConnected, await customerFrame.evaluate(() => window.SupportLayer.getState()));
@@ -611,7 +704,7 @@ async function main() {
 
     /* ---------- state persistence ---------- */
     group("state persistence");
-    await page.click("#btn-reload");
+    await customerFrame.evaluate(() => location.reload()).catch(() => {});
     await waitFor(() => customerFrame.evaluate(() => !!(window.SupportLayer && window.SupportLayer.config)), { timeout: 10000 });
     const resumeVisible = await waitFor(() =>
       customerFrame.evaluate(() => {
@@ -621,11 +714,19 @@ async function main() {
       }), { timeout: 6000 });
     check("reload offers the resume prompt instead of silently reconnecting", resumeVisible);
     eq("state is IDLE until the user resumes", await customerFrame.evaluate(() => window.SupportLayer.getState()), "IDLE");
+    // Count the widget's own webhook events from inside the frame; the homepage inspector is gone.
+    await customerFrame.evaluate(() => {
+      window.__events = [];
+      window.addEventListener("supportlayer:webhook", (e) => window.__events.push(e.detail && e.detail.event_type));
+    });
     await clickIn(page, customerFrame, '.sl-view[data-view=resume] [data-act="resume"]', { frameSelector: "#customer-frame" });
     const resumed = await waitFor(() => customerFrame.evaluate(() => ["WAITING", "CONNECTED"].includes(window.SupportLayer.getState())), { timeout: 6000 });
     check("resuming reopens the session", resumed);
-    const updates = await waitFor(async () => (await page.$eval("#chip-events b", (el) => Number(el.textContent))) >= 2, { timeout: 6000 });
-    check("a support_update event was emitted on resume", updates);
+    const updates = await waitFor(
+      () => customerFrame.evaluate(() => (window.__events || []).includes("support_update")),
+      { timeout: 6000 }
+    );
+    check("a support_update event was emitted on resume", updates, JSON.stringify(await customerFrame.evaluate(() => window.__events)));
     const rejoined = await waitFor(() => customerFrame.evaluate(() => window.SupportLayer.getState() === "CONNECTED"), { timeout: 8000 });
     check("the agent pane finds the resumed session again", rejoined);
 
@@ -646,17 +747,17 @@ async function main() {
     check("session storage cleared", !cleaned.stored);
 
     if (HEADED) {
-      await page.screenshot({ path: path.join(SHOT_DIR, "landing-headed.png"), fullPage: false });
+      await page.screenshot({ path: path.join(SHOT_DIR, "room-headed.png"), fullPage: false });
     } else {
-      await page.screenshot({ path: path.join(SHOT_DIR, "landing-headless.png"), fullPage: false });
+      await page.screenshot({ path: path.join(SHOT_DIR, "room-headless.png"), fullPage: false });
     }
 
     /* ============================= layout sanity ============================= */
     group("layout sanity (desktop)");
-    const layout = await page.evaluate(() => {
+    const layout = await home.evaluate(() => {
       const box = document.querySelector(".box.is-standard");
-      const frame = document.querySelector("#customer-frame").getBoundingClientRect();
-      const agentFrameEl = document.querySelector("#agent-frame").getBoundingClientRect();
+      const pane = document.querySelector(".story-pane .frame").getBoundingClientRect();
+      const screen = document.querySelector(".screen").getBoundingClientRect();
       return {
         overflowX: document.documentElement.scrollWidth - window.innerWidth,
         heroFont: parseFloat(getComputedStyle(document.querySelector(".hero .title")).fontSize),
@@ -664,9 +765,9 @@ async function main() {
         floatingIcons: document.querySelectorAll(".floating-svg").length,
         faIcons: document.querySelectorAll("svg.svg-inline--fa").length,
         boxRadius: getComputedStyle(box).borderRadius,
-        customerFrame: { w: Math.round(frame.width), h: Math.round(frame.height) },
-        agentFrame: { w: Math.round(agentFrameEl.width), h: Math.round(agentFrameEl.height) },
-        payloadFont: getComputedStyle(document.querySelector("#payload")).fontSize,
+        storyColumns: getComputedStyle(document.querySelector(".story-grid")).gridTemplateColumns.split(" ").length,
+        paneW: Math.round(pane.width),
+        screenH: Math.round(screen.height),
       };
     });
     check("no horizontal overflow on desktop", layout.overflowX <= 1, `overflow=${layout.overflowX}px`);
@@ -675,8 +776,11 @@ async function main() {
     check("floating background icons were generated", layout.floatingIcons > 5, `${layout.floatingIcons}`);
     check("Font Awesome rendered its icons", layout.faIcons > 5, `${layout.faIcons} svg icons`);
     check("family styling is in effect (Bulma loaded)", layout.boxRadius !== "0px", layout.boxRadius);
-    check("customer frame is a usable width", layout.customerFrame.w > 900 && layout.customerFrame.h >= 600, JSON.stringify(layout.customerFrame));
-    check("agent frame is a usable width", layout.agentFrame.w > 400, JSON.stringify(layout.agentFrame));
+    check("the storyboard is two panes side by side on desktop", layout.storyColumns === 2, `${layout.storyColumns} columns`);
+    check("each story pane is a usable width", layout.paneW > 380, `${layout.paneW}px`);
+    check("the mock screens have real height", layout.screenH > 300, `${layout.screenH}px`);
+
+    group("customer app layout");
 
     const customerLayout = await customerFrame.evaluate(() => {
       const cols = getComputedStyle(document.querySelector("main")).gridTemplateColumns;
@@ -708,22 +812,24 @@ async function main() {
     eq("no agent overlay is visible on an idle page", idleOverlays.join(","), "");
 
     group("layout sanity (mobile)");
-    await page.setViewport({ width: 390, height: 844, isMobile: true, hasTouch: true, deviceScaleFactor: 2 });
-    await page.reload({ waitUntil: "domcontentloaded" });
-    await waitFor(() => page.evaluate(() => !!document.querySelector("#customer-frame")));
+    await home.setViewport({ width: 390, height: 844, isMobile: true, hasTouch: true, deviceScaleFactor: 2 });
+    await home.reload({ waitUntil: "domcontentloaded" });
+    await waitFor(() => home.evaluate(() => !!document.querySelector("#story")));
     await sleep(600);
-    const mobile = await page.evaluate(() => ({
+    const mobile = await home.evaluate(() => ({
       overflowX: document.documentElement.scrollWidth - window.innerWidth,
       heroFont: parseFloat(getComputedStyle(document.querySelector(".hero .title")).fontSize),
       navWrap: getComputedStyle(document.querySelector(".nav-links")).position,
-      frameW: Math.round(document.querySelector("#customer-frame").getBoundingClientRect().width),
+      storyColumns: getComputedStyle(document.querySelector(".story-grid")).gridTemplateColumns.split(" ").length,
+      paneW: Math.round(document.querySelector(".story-pane .frame").getBoundingClientRect().width),
     }));
     check("no horizontal overflow on mobile", mobile.overflowX <= 1, `overflow=${mobile.overflowX}px`);
     check("hero scales down on mobile", mobile.heroFont < 40 && mobile.heroFont >= 20, `${mobile.heroFont}px`);
     eq("nav links drop into the flow on mobile", mobile.navWrap, "static");
-    check("customer frame fits the mobile viewport", mobile.frameW > 300 && mobile.frameW <= 390, `${mobile.frameW}px`);
-    if (HEADED) await page.screenshot({ path: path.join(SHOT_DIR, "mobile-headed.png") });
-    await page.setViewport({ width: 1600, height: 1000 });
+    check("the storyboard stacks to one column on mobile", mobile.storyColumns === 1, `${mobile.storyColumns} columns`);
+    check("the story pane fits the mobile viewport", mobile.paneW > 280 && mobile.paneW <= 390, `${mobile.paneW}px`);
+    if (HEADED) await home.screenshot({ path: path.join(SHOT_DIR, "mobile-headed.png") });
+    await home.setViewport({ width: 1600, height: 1000 });
 
     /* ============================= harness page ============================= */
     const harness = await browser.newPage();

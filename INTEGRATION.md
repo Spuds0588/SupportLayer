@@ -420,22 +420,24 @@ Do these in order; each one catches a distinct class of mistake.
    delivery failure (only if the POST actually failed).
 
 Two live pages you can compare against: the
-[homepage demo](https://spuds0588.github.io/SupportLayer/) (the real widget in both roles at once,
-over the loopback transport) and the
+[two-role room](https://spuds0588.github.io/SupportLayer/room.html) (the real widget in both roles at
+once, over the loopback transport — the customer frame above, the agent frame below) and the
 [integration harness](https://spuds0588.github.io/SupportLayer/test.html) (in-page assertions and a
-link into a real session).
+link into a real session). The
+[homepage](https://spuds0588.github.io/SupportLayer/) is a pitch with a scripted animation, not a
+harness.
 
 ---
 
 ## 10. Demo mode — do not ship it
 
 `data-demo="true"`, or `?sl-demo=1` on the URL, replaces `getDisplayMedia` with a synthetic frame and
-PeerJS with a `BroadcastChannel` loopback bus. It exists so the marketing page can show the whole flow
-with no backend and no permission prompt.
+PeerJS with a `BroadcastChannel` loopback bus. It exists so a page can show the whole flow with no
+backend and no permission prompt — `room.html` and the test suite use it for that.
 
 **It must never be reachable in production.** Do not set `data-demo` in a template that a user can
 influence, and if you accept a query string anywhere near the widget, be aware
-`?sl-demo=1` switches it on. The homepage demo deliberately drives the *real* widget — only capture
+`?sl-demo=1` switches it on. The two-role room deliberately drives the *real* widget — only capture
 and transport are simulated, so commands issued from it are genuine and land on the page.
 
 ---

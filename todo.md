@@ -156,6 +156,26 @@ v2 collapsed the two-page design into one: the agent no longer has a page of the
       `agents.md`, which still called SupportLayer “the third sibling” and still described
       MailLayer/PhoneLayer “live demos” on a homepage that no longer has them.
 
+## Phase 12 — The demo plays itself  ✅ done
+- [x] Removed the interactive demo from the homepage: two live iframes, nine control buttons, a payload
+      inspector, live status chips, and a six-step tutorial. It asked a visitor to follow instructions
+      before they had decided to care, and it duplicated `INTEGRATION.md`.
+- [x] Replaced it with `#story`, a scripted storyboard: a mock customer window and a mock agent window,
+      six steps, one caption each, and a Replay button. It starts on scroll via `IntersectionObserver`
+      and jumps to the finished story under `prefers-reduced-motion`.
+- [x] The story shows the report arriving **where the team already works** (a channel card with the
+      redacted snapshot), not in a bespoke support dashboard — which is how a solo founder would wire
+      an MVP. Then the agent joins the customer's own URL and annotates it.
+- [x] Steps are pure DOM state (`data-step` + `.on`), so the suite asserts on state, never on timing.
+      `window.__story` is the test seam.
+- [x] `room.html`: a dev fixture that loads the same page twice, once per role. The suite drives it
+      instead of the marketing page, so a homepage redesign can no longer break widget tests.
+- [x] Fixed two real bugs the storyboard surfaced: hidden steps used `visibility` (which keeps the box,
+      silently padding the widget panel), and the `1fr` grid track refused to shrink below the frame
+      bar's nowrap URL — 466px of frame inside a 358px column on a 390px phone.
+- [x] Suite 142 → 157 checks: the storyboard plays itself to the end, replays deterministically,
+      ends on the customer's own URL, and stacks to one column on mobile.
+
 ## Backlog (explicitly not in v2)
 - [ ] Multiparty sessions / multiple agents per session.
 - [ ] A real two-browser WebRTC pass: `getDisplayMedia` permission flow and live agent media

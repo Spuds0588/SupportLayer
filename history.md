@@ -272,3 +272,44 @@ the previous session deleted. Both corrected.
 
 Checked every family link before shipping them: MailLayer 301s to its canonical
 `embedded.maillayer.wiki` and resolves 200; PhoneLayer, ZipLayer and SupportLayer are all direct 200s.
+
+**Session 5 — the demo stopped asking and started showing.** The homepage's interactive demo was the last
+piece of v1 thinking on the page: two live iframes, four control buttons, three status chips, a payload
+inspector that pretty-printed the webhook JSON, and a six-step tutorial telling visitors what to click. It
+asked someone to follow instructions before they had decided to care, and all of it was already documented
+in `INTEGRATION.md`.
+
+**It is now a storyboard.** `#story` is a mock customer window and a mock agent window playing six steps:
+the checkout fails, the customer asks for help from the page itself, redaction runs locally, the report
+lands **where the team already works** — a channel card with the redacted snapshot, not a bespoke support
+dashboard, because that is how a solo founder wires an MVP — then the agent opens the customer's own URL,
+the dock appears, and the error gets highlighted and resolved. It starts itself when scrolled into view and
+offers Replay; under `prefers-reduced-motion` it skips straight to the finished story rather than animating
+at someone's expense.
+
+Every step is a pure DOM state (`data-step` plus `.on` classes), so the suite asserts on state and never on
+timing — which matters on a host whose compositor is unreliable enough that the suite already avoids
+rAF-dependent clicks.
+
+**Two real bugs it surfaced.** First, hidden steps were using `visibility`, which hides the paint but keeps
+the box: the invisible chat quietly padded the widget panel to 200px and left gaps in the message list. Only
+the absolutely-positioned overlays fade now; anything that must stop occupying layout uses `display`.
+Second, the pointer and the highlight were positioned by percentage against the pane, so they floated in
+empty space next to the error they were supposed to be indicating — both are now anchored to the error
+banner itself, so they land on the problem at any pane width.
+
+**A third, only visible on a phone.** The storyboard's `1fr` grid track refused to shrink below its
+content's min-content width, and the frame bar's `nowrap` URL floored it at 466px inside a 358px column on a
+390px viewport. `document.scrollWidth` still reported 390, so the existing "no horizontal overflow" check
+passed while the frame was actually cut off. `minmax(0, 1fr)` plus `min-width: 0` on the bar fixed it, and
+the new assertion checks the pane width directly rather than trusting the scroll width.
+
+**`room.html` — the fixture the tests own.** With the homepage no longer embedding the widget, the
+interaction tests had nothing to drive. They now bring their own room: the same page loaded twice, customer
+and agent. That decouples widget tests from marketing markup — a homepage redesign can no longer turn the
+suite red. First attempt built the room with `page.setContent`, which puts the top frame on `about:blank` and
+hands its iframes an opaque storage context, where `localStorage` throws `SecurityError`. The widget mirrors
+its session there, so the reload/resume test silently lost its session. A real page on a real origin fixed
+it, and the reason is now written down where the next person will look.
+
+**Suite: 142 → 157 checks.** Green headless and headed, locally and against the deployed origin.

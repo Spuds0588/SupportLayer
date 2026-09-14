@@ -11,10 +11,12 @@ dependencies, no framework.
   `window.SupportLayer`. There is no agent page: the agent loads the *customer's own URL*
   with `?sl_role=agent&peer=<id>` and this same script boots the agent view instead of
   the request button. Do not reintroduce a second HTML deliverable.
-- `index.html` — landing page + **simulated demo** (mock customer app, the same app again in
-  the agent role, mock webhook inspector). It sells and points at `INTEGRATION.md`; it is
-  deliberately *not* the configuration reference. The MailLayer and PhoneLayer scripts are still
-  loaded, but only one quiet footer line names the sister projects.
+- `index.html` — landing page: a pitch, a **scripted storyboard** (`.story`), and a pointer at
+  `INTEGRATION.md`. Deliberately *not* the configuration reference and deliberately *not* an
+  interactive demo. The MailLayer and PhoneLayer scripts are still loaded, but only one quiet
+  footer line names the sister projects.
+- `room.html` — dev fixture: `demo-app.html` loaded twice, once per role, for manual and automated
+  two-role runs. See “Two roles, one document” below.
 - `test.html` — integration harness: loads the widget in every mode against a local
   webhook catcher, and links out to a real agent-role session.
 - `serve.js` — zero-dependency static dev server (`npm start`).
@@ -126,27 +128,50 @@ loopback bus.
   normalized coordinates stay honest. It is labelled `SIMULATED FEED`; commands sent from
   it are real and land on the real page.
 
-## Demo architecture (`index.html`)
+## The homepage demo is an animation, on purpose
 
-The landing page's demo is three real pieces wired together, not a mock:
+`index.html` used to embed the widget twice and hand the visitor a control panel to drive it. That made the
+landing page a worse copy of this repository: it carried a payload inspector, live status chips, four control
+buttons, and a six-step tutorial, and it put a `getDisplayMedia`-shaped chore in front of someone who had not
+decided to care yet.
 
-1. `demo-app.html` in an iframe — a genuine customer page running the genuine widget.
-2. `demo-app.html?sl_role=agent&sl-demo=1&peer=<id>` in a second iframe — the *same page* in the
-   agent role, which is precisely the real workflow, talking over the `BroadcastChannel` loopback bus.
-3. A payload inspector in the parent page — fed by the demo app's `postMessage` bridge of
-   `supportlayer:webhook`, plus polling of `SupportLayer.getState()` and the agent-role state seam
-   `SupportLayer.agent.state()` (undefined in the customer role, which `test.html` asserts).
+Now the homepage **sells** and the demo **plays**. `#story` is a scripted storyboard — a mock customer window
+and a mock agent window whose states are driven by a single `data-step` attribute, with one caption per step
+and a Replay button. It starts itself via `IntersectionObserver` when scrolled into view, and jumps straight to
+the finished story under `prefers-reduced-motion`.
 
-The customer frame is its own document on purpose: its viewport *is* the customer viewport, so the coordinates the
-agent sends land exactly where the agent clicked. Do not move the demo app into the parent document — the mapping
-breaks and the FAB/panel would cover the marketing page.
+Rules for it:
+
+- **Every step is a pure DOM state**, so the suite asserts on `data-step` and on `.on` classes, never on
+timing. `window.__story` (`play`, `goto`, `step`, `last`) is the test seam — do not remove it.
+- Anything that must stop occupying layout when hidden uses `display`, not `visibility`. Visibility hides the
+  paint but keeps the box, which silently padded the widget panel and left gaps in the chat.
+- Overlay-only pieces (the report card, the session view, the pointer, the highlight) are absolutely
+  positioned and may fade; the highlight and the pointer are anchored to the error banner itself so they land
+  on the problem at any pane width.
+- It must not grow into an interactive demo again. The interactive one lives in `room.html`.
+
+## Two roles, one document (`room.html`)
+
+The one place outside the widget where both roles run side by side: the same page loaded twice, customer and
+agent, over the `BroadcastChannel` loopback bus. It exists because the homepage no longer embeds the widget and
+because `tests/e2e.mjs` needs a room it owns rather than one it borrows from marketing markup.
+
+The customer frame is its own document on purpose: its viewport *is* the customer viewport, so the coordinates
+the agent sends land exactly where the agent clicked. Do not move the demo app into the parent document — the
+mapping breaks and the FAB/panel would cover the host page.
+
+Both frames must share a **real origin**. An `about:blank` parent gives its frames an opaque storage context,
+where `localStorage` throws `SecurityError` — which is what the widget mirrors its session to, so the
+reload/resume path silently dies. The suite loads `room.html` over HTTP for exactly this reason.
 
 ## Testing
 
 - `npm start` then `node tests/e2e.mjs` (headless) or `node tests/e2e.mjs --headed`.
-- The suite must stay green in **both** modes on every change: 119 checks cover config parsing, the request flow,
+- The suite must stay green in **both** modes on every change: 157 checks cover config parsing, the request flow,
   redaction round-trips, coordinate accuracy (±12px), drawing auto-clear, directed typing, reload/resume, teardown,
-  the harness assertions, and desktop/mobile layout. Headed runs have historically caught bugs headless missed
+  the homepage storyboard (it plays itself to the end, replays, and stacks on mobile), the two-role room, the
+  harness assertions, and desktop/mobile layout. Headed runs have historically caught bugs headless missed
   (a loopback timer firing after teardown, the always-visible draw hint).
 - **Idle pages must show zero agent chrome.** The overlay elements (`canvas.sl-draw`,
   `.sl-laser`, `.sl-draw-hint`, `.sl-typing`) all default to hidden and are only revealed
@@ -159,9 +184,9 @@ breaks and the FAB/panel would cover the marketing page.
   catches rendering, `getDisplayMedia` permission flow, hover/focus behavior, and
   anything that depends on real window geometry.
 - The suite must leave the console clean. Any `console.error` from the widget is a bug.
-- Manual check before any release push: `index.html` demo end-to-end (report → blur →
-  webhook → agent connects → laser/type/draw land on the mock app), then `test.html` with
-  two real browser windows for the actual WebRTC path.
+- Manual check before any release push: the homepage storyboard plays through and reads correctly, then
+  `room.html` for the full two-role interaction (report → blur → webhook → agent connects → laser/type/draw
+  land on the mock app), then `test.html` with two real browser windows for the actual WebRTC path.
 
 ## Release workflow
 

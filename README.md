@@ -11,14 +11,16 @@ is the whole product, and the agent experience is that same script running in a 
 
 ## ▶ [**Open the live homepage and try the demo →**](https://spuds0588.github.io/SupportLayer/)
 
-The homepage runs the **real widget in both roles at once** — the customer files a report and watches the
-redaction pass, then the agent joins the same page as a second frame and drives the laser/draw/type tools onto it.
-No backend, no signup, no install.
+The homepage opens with a short **animated walkthrough**: a customer's checkout fails, they ask for help from the
+page itself, the report lands in a channel your team already reads, and an agent joins them on that same URL to
+point and draw. Nothing to drive, nothing to install. To run both roles side by side for real, open
+[`room.html`](https://spuds0588.github.io/SupportLayer/room.html).
 
 | | |
 | --- | --- |
-| 🏠 **Homepage + simulated demo** | **[spuds0588.github.io/SupportLayer](https://spuds0588.github.io/SupportLayer/)** |
+| 🏠 **Homepage + walkthrough** | **[spuds0588.github.io/SupportLayer](https://spuds0588.github.io/SupportLayer/)** |
 | 🧪 **Integration harness** | [spuds0588.github.io/SupportLayer/test.html](https://spuds0588.github.io/SupportLayer/test.html) |
+| 🎬 **Two-role room** | [spuds0588.github.io/SupportLayer/room.html](https://spuds0588.github.io/SupportLayer/room.html) — the same page twice, customer and agent |
 | 🎧 **Agent experience** | The customer's own URL + `?sl_role=agent&peer=<id>` — same page, no second app |
 | 📘 **Integration guide** | [INTEGRATION.md](https://github.com/Spuds0588/SupportLayer/blob/main/INTEGRATION.md) — wiring it into your app, for humans and coding agents |
 
@@ -95,7 +97,7 @@ window.SupportLayer.removePrivacyBlur();
 ```
 
 Two public events fire on `window`: `supportlayer:state` and `supportlayer:webhook` (carrying the exact payload
-that is about to be sent — it is what powers the payload inspector in the demo).
+that is about to be sent — wire it to your own UI to preview or log what your webhook will receive).
 
 ### Webhook payload
 
@@ -181,8 +183,9 @@ verified rather than assumed.
 | File | Role |
 | --- | --- |
 | `supportlayer.js` | The product — both roles. Vanilla JS IIFE, one global, zero dependencies. |
-| `index.html` | Landing page + simulated demo (customer frame, agent frame, payload inspector). |
-| `demo-app.html` | The simulated customer app used inside the demo frame. |
+| `index.html` | Landing page: the pitch, plus a self-playing storyboard instead of an interactive demo. |
+| `demo-app.html` | The simulated customer app, loaded in both roles by `room.html`. |
+| `room.html` | Dev fixture: the same page twice, customer and agent, for manual and automated two-role runs. |
 | `test.html` | Integration harness with in-page assertions. |
 | `serve.js` | Zero-dependency static dev server. |
 | `tests/e2e.mjs` | Puppeteer end-to-end suite (headless + headed). |

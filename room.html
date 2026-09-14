@@ -1,0 +1,33 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>SupportLayer — the two-role room</title>
+<link rel="icon" type="image/svg+xml" href="favicon.svg">
+<style>
+  body { margin: 0; padding: 10px; background: #0b0e13; display: grid; gap: 10px; }
+  iframe { width: 100%; height: 820px; border: 1px solid rgba(255,255,255,.12); border-radius: 10px; background: #fff; }
+  p { margin: 0 0 4px; color: #6b7385; font: 600 12px/1.5 -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; }
+  p b { color: #9fe9dc; }
+</style>
+</head>
+<body>
+
+<!--
+  A development fixture, not a product surface.
+
+  It loads the same page twice on the same origin: once as the customer and once as the agent,
+  so both roles of the one script can be exercised in a single browser. That is also what
+  tests/e2e.mjs drives — the suite brings its own room rather than depending on the landing page,
+  which is a pitch and a scripted animation and no longer embeds the widget at all.
+
+  Both frames have to share a real origin (not `about:blank`), because the widget mirrors its
+  session to `localStorage` and the demo transport is a same-origin `BroadcastChannel`.
+-->
+<p>customer frame — <b>demo-app.html</b> · agent frame — <b>demo-app.html?sl_role=agent</b> · same file, two roles</p>
+<iframe id="customer-frame" src="demo-app.html" title="Customer role"></iframe>
+<iframe id="agent-frame" src="demo-app.html?sl_role=agent&sl-demo=1" title="Agent role"></iframe>
+
+</body>
+</html>
