@@ -11,9 +11,10 @@ is the whole product, and the agent experience is that same script running in a 
 
 ## ▶ [**Open the live homepage and try the demo →**](https://spuds0588.github.io/SupportLayer/)
 
-The homepage opens with a short **animated walkthrough**: a customer's checkout fails, they ask for help from the
-page itself, the report lands in a channel your team already reads, and an agent joins them on that same URL to
-point and draw. The stage **cuts between the customer's view and the agent's** as the story moves, so you see each
+The homepage leads with the outcome — **one line of code and your app has support built in**, wired to the webhook
+you already run — and keeps the how-to in [`INTEGRATION.md`](INTEGRATION.md). It then plays a short **animated
+walkthrough**: a customer's checkout fails, they ask for help from the page itself, the report lands in a channel
+your team already reads, and an agent joins them on that same URL to point and draw. The stage **cuts between the customer's view and the agent's** as the story moves, so you see each
 side of the session as it happens rather than comparing two windows. Nothing to drive, nothing to install. To run
 both roles side by side for real, open [`room.html`](https://spuds0588.github.io/SupportLayer/room.html).
 
@@ -164,7 +165,7 @@ reported window geometry. Pixels never cross the wire.
 
 ```bash
 npm start            # zero-dependency static server on http://127.0.0.1:4174
-npm test             # headless Chromium end-to-end suite (183 checks)
+npm test             # headless Chromium end-to-end suite (188 checks)
 npm run test:headed  # same suite with a visible window (real rendering + input)
 npm run test:live    # the same checks against the deployed GitHub Pages site
 npm run live:check   # the REAL path: real capture + real PeerJS signalling between two peers
@@ -179,7 +180,7 @@ It also asserts layout invariants — the FAB inside the customer viewport, the 
 toast and coach line clearing the dock — so a CSS regression fails the build instead of surviving as a bad screenshot.
 
 `test:live` passes `--base <url>` (equivalently `SL_BASE`) so the identical suite runs against a deployed origin —
-the same 183 checks pass against `https://spuds0588.github.io/SupportLayer/`, which is how the published page is
+the same 188 checks pass against `https://spuds0588.github.io/SupportLayer/`, which is how the published page is
 verified rather than assumed.
 
 That suite runs everything over a same-origin `BroadcastChannel` bus with synthetic capture, which means it never
@@ -193,7 +194,7 @@ so a human can join the same session from another browser.
 | File | Role |
 | --- | --- |
 | `supportlayer.js` | The product — both roles. Vanilla JS IIFE, one global, zero dependencies. |
-| `index.html` | Landing page: the pitch, plus a self-playing storyboard that cuts between the two perspectives. |
+| `index.html` | Landing page: a value-first pitch, a self-playing storyboard that cuts between the two perspectives, and a waving-hands background. |
 | `demo-app.html` | The simulated customer app, loaded in both roles by `room.html`. |
 | `room.html` | Dev fixture: the same page twice, customer and agent, for manual and automated two-role runs. |
 | `test.html` | Integration harness with in-page assertions. |

@@ -3,7 +3,7 @@
 Status legend: `[x]` done, `[~]` in progress, `[ ]` not started.
 Mirrors PRD Part 3 plus the launch/hosting work.
 
-**v2 is built, published, and green: 171/171 end-to-end checks pass in headless and headed
+**v2 is built, published, and green: 188/188 end-to-end checks pass in headless and headed
 Chromium, locally *and* against the live GitHub Pages origin.** Live at
 https://spuds0588.github.io/SupportLayer/. Remaining work is the explicit backlog.
 
@@ -66,8 +66,8 @@ v2 collapsed the two-page design into one: the agent no longer has a page of the
 - [x] Screenshots removed from the agent's face: full-bleed customer stage + transcript only.
 
 ## Phase 6 — Landing page (GitHub Pages)  ✅ done
-- [x] `index.html` in the Layer-family visual language (Bulma, floating SVG field).
-- [x] Hero, install snippet (jsDelivr + GH Pages), animated request→resolve flow.
+- [x] `index.html` in the Layer-family visual language (Bulma, teal accent, animated field behind it).
+- [x] Hero, install snippet (jsDelivr + GH Pages).
 - [x] Feature grid pulled from PRD §1.4.
 - [x] **Simulated demo**: full-viewport mock customer app + the *same app in the agent role* +
       mock webhook inspector, wired through the loopback transport.
@@ -214,6 +214,27 @@ v2 collapsed the two-page design into one: the agent no longer has a page of the
       panel and then proves it survives the cut back to their side.
 - [x] Suite 171 → 182 checks: the no-stop-control invariant (runtime *and* source-level), the share
       contract on the form per mode, and a `audio mode is retired` group asserting the alias.
+
+## Phase 14 — Hero sells the outcome, background asks for help  ✅ done
+- [x] Rewrote the hero around the value instead of the mechanism: **one line of code and your app has real
+      support built in**, wired to the webhook you already run. The old headline described the snapshot, the blur
+      pass and the role parameters; that detail now lives only in `INTEGRATION.md`.
+- [x] Deleted the five-step `sl-flow` strip (report → blur → POST → `?sl_role=agent` → draw) so nothing above the
+      fold explains the machinery, and reframed the four feature boxes as outcomes: support by default, their
+      secrets stay theirs, wired to your tools, show don't explain.
+- [x] Retitled the page, description, and OG/Twitter cards to match the value framing.
+- [x] Replaced the floating-lifebuoy background with **hands popping up, waving for attention, and fading out** —
+      one hand spawned on a timer at a random spot, risen, waved, removed. Spawned over time, not looped forever,
+      so the rhythm never reads as a heartbeat. Drawn from primitives in SupportLayer's own teal (MailLayer is
+      red-orange, PhoneLayer purple, ZipLayer pink — no collision).
+- [x] The background is silent under `prefers-reduced-motion` (hidden in CSS *and* never spawned in JS),
+      pointer-transparent, and pauses in a hidden tab.
+- [x] Suite 183 → 188 checks: the hands group samples the spawner over ~3.5s (spawned / painted / self-clearing /
+      no pointer events) and a reduced-motion group emulates the media feature and asserts silence. That group
+      failed twice before it was right, both times because of the environment rather than the code: headless saw
+      43 spawns but zero hands (the suite's page is backgrounded by then, and the spawner pauses when hidden), and
+      headed saw zero spawns at all (this host's desktop reports `prefers-reduced-motion: reduce`). It now forces
+      the motion-allowed branch — reloading so the JS guard re-reads the query — and calls `bringToFront()` first.
 
 ### Live path  ✅ done (the old "unverified" backlog item)
 - [x] `tests/live-session.mjs` (`npm run live:check` / `live:session`): a real customer session in a

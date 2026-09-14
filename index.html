@@ -3,18 +3,18 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>SupportLayer — See exactly what your users see, in one script tag</title>
-<meta name="description" content="Zero-backend, drop-in diagnostic and live P2P support widget. One-frame snapshot redacted locally before capture, straight to your webhook, plus live screen sessions where an agent can point, draw, and hand over text.">
+<title>SupportLayer — One line of code for built-in app support</title>
+<meta name="description" content="Drop one script tag into your app and support is live: users report the screen they're stuck on, your agent can join and draw right on it, and every request lands on the webhook you already run.">
 <meta name="robots" content="index, follow">
 <link rel="canonical" href="https://spuds0588.github.io/SupportLayer/">
 <link rel="icon" type="image/svg+xml" href="favicon.svg">
-<meta property="og:title" content="SupportLayer — See exactly what your users see, in one script tag">
-<meta property="og:description" content="Drop-in diagnostics + live P2P support. No backend, no S3, no SDK. Snapshot, redact, and connect.">
+<meta property="og:title" content="SupportLayer — One line of code for built-in app support">
+<meta property="og:description" content="One script tag and your app has support built in — reports, live chat, and screen sessions your agent can draw on, delivered to your webhook.">
 <meta property="og:type" content="website">
 <meta property="og:url" content="https://spuds0588.github.io/SupportLayer/">
 <meta name="twitter:card" content="summary_large_image">
-<meta name="twitter:title" content="SupportLayer — See exactly what your users see, in one script tag">
-<meta name="twitter:description" content="Drop-in diagnostics + live P2P support. No backend, no S3, no SDK.">
+<meta name="twitter:title" content="SupportLayer — One line of code for built-in app support">
+<meta name="twitter:description" content="One script tag and your app has support built in — no backend, no second app to host.">
 <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bulma@1.0.0/css/bulma.min.css">
 <script defer src="https://use.fontawesome.com/releases/v5.15.4/js/all.js"></script>
 <style>
@@ -43,7 +43,7 @@
   }
   code { background: rgba(255,255,255,.06); color: #9fe9dc; padding: 1px 6px; border-radius: 6px; font-size: .9em; }
 
-  /* ---------- background: floating lifebuoys ---------- */
+  /* ---------- background: hands waving for attention ---------- */
   #bg-canvas {
     position: fixed; inset: 0; z-index: -1; overflow: hidden; pointer-events: none;
     background: radial-gradient(ellipse at center, transparent 0%, transparent 45%, rgba(6,10,12,.9) 100%);
@@ -53,12 +53,32 @@
     background: radial-gradient(ellipse at 50% 0%, rgba(20,184,166,.16) 0%, transparent 55%),
                 radial-gradient(ellipse at 100% 100%, rgba(13,148,136,.10) 0%, transparent 55%);
   }
-  .bg-wrap { position: absolute; inset: 0; overflow: hidden; perspective: 1000px; }
-  .floating-svg { position: absolute; bottom: -200px; transform-style: preserve-3d; fill: none; stroke: var(--primary); stroke-width: 1.6; opacity: .3; }
-  @keyframes float-up {
-    from { bottom: -200px; transform: translateX(0) rotate(0deg); }
-    to { bottom: 120vh; transform: translateX(var(--drift)) rotate(var(--rotation)); }
+  .bg-wrap { position: absolute; inset: 0; overflow: hidden; }
+  /* A hand pops up to ask for help, waves a beat for attention, then fades away.
+     Opacity lives on the slot (a constant per hand) so the pop/fade keyframes can
+     animate plain 0→1→1→0 values inside the nested element — no custom properties
+     inside keyframes, which keeps this working everywhere. */
+  .hand-slot { position: absolute; opacity: var(--peak, .15); will-change: transform, opacity; }
+  .hand-pop { width: 100%; height: 100%; animation: hand-rise var(--dur, 3.4s) ease-out forwards; }
+  .hand-slot svg { display: block; width: 100%; height: 100%; overflow: visible; animation: hand-wave var(--dur, 3.4s) ease-in-out forwards; transform-origin: 50% 88%; }
+  .hand-slot svg rect { fill: var(--primary); }
+  .hand-slot svg path { fill: none; stroke: var(--primary); stroke-width: 1.1; stroke-linecap: round; opacity: .8; }
+  @keyframes hand-rise {
+    0% { opacity: 0; transform: translateY(26px) scale(.7); }
+    14% { opacity: 1; transform: translateY(0) scale(1); }
+    76% { opacity: 1; transform: translateY(-3px) scale(1); }
+    100% { opacity: 0; transform: translateY(-18px) scale(1.04); }
   }
+  @keyframes hand-wave {
+    0%, 100% { transform: rotate(-7deg); }
+    12% { transform: rotate(9deg); }
+    26% { transform: rotate(-9deg); }
+    40% { transform: rotate(8deg); }
+    54% { transform: rotate(-7deg); }
+    68% { transform: rotate(5deg); }
+    82% { transform: rotate(-3deg); }
+  }
+  @media (prefers-reduced-motion: reduce) { .hand-slot { display: none; } }
 
   /* ---------- layout ---------- */
   .section { padding: 7rem 2rem; }
@@ -92,24 +112,6 @@
     font-family: 'Inter', sans-serif; font-size: .8rem;
   }
   .copy-btn:hover { background: rgba(255,255,255,.1); color: #fff; }
-
-  /* ---------- hero flow ---------- */
-  .sl-flow { display: flex; align-items: center; justify-content: center; flex-wrap: wrap; gap: .7rem; margin: 3rem auto 0; max-width: 960px; }
-  .sl-flow-step {
-    display: inline-flex; align-items: center; gap: .5rem; padding: .6rem 1rem; border-radius: 999px;
-    border: 1px solid rgba(255,255,255,.14); background: rgba(255,255,255,.04); color: var(--text-dim);
-    font-size: .9rem; font-weight: 600; animation: sl-glow 6s ease-in-out infinite;
-  }
-  .sl-flow-step i { color: var(--primary); font-size: .85rem; }
-  .sl-flow-arrow { color: rgba(255,255,255,.25); font-size: .75rem; animation: sl-arrow 6s ease-in-out infinite; }
-  .st-2 { animation-delay: 1.2s; } .st-3 { animation-delay: 2.4s; } .st-4 { animation-delay: 3.6s; } .st-5 { animation-delay: 4.8s; }
-  .a-1 { animation-delay: .6s; } .a-2 { animation-delay: 1.8s; } .a-3 { animation-delay: 3s; } .a-4 { animation-delay: 4.2s; }
-  @keyframes sl-glow {
-    0%, 15%, 100% { border-color: rgba(255,255,255,.14); background: rgba(255,255,255,.04); color: var(--text-dim); box-shadow: none; }
-    5%, 10% { border-color: var(--primary-border); background: var(--primary-dim); color: #fff; box-shadow: 0 0 20px rgba(20,184,166,.28); }
-  }
-  @keyframes sl-arrow { 0%, 14%, 100% { color: rgba(255,255,255,.25); } 6%, 10% { color: var(--primary); } }
-  @media (prefers-reduced-motion: reduce) { .sl-flow-step, .sl-flow-arrow { animation: none; } }
 
   /* ---------- boxes ---------- */
   .box.is-standard {
@@ -312,15 +314,14 @@
 <section class="hero">
   <div class="hero-body">
     <div class="container has-text-centered">
-      <span class="eyebrow">Open source — drop-in diagnostics + live support</span>
+      <span class="eyebrow">Open source · one line of code</span>
       <h1 class="title">
-        See exactly what your users see.<br><span class="has-text-sl">One script tag, no backend.</span>
+        One line of code, and your app<br><span class="has-text-sl">has real support built in.</span>
       </h1>
       <h2 class="subtitle">
-        SupportLayer captures a one-frame snapshot, redacts the sensitive parts <em>before</em> capture, and POSTs the
-        report straight to your webhook. When a report isn't enough, your support agent opens <em>the same URL</em> with
-        role parameters and lands in a full-screen agent view: the customer's screen, the chat, and a floating dock of
-        annotation tools — without a relay server, an S3 bucket, a third-party SDK, or a second app to maintain.
+        Paste a script tag and support is live. Your users ask for help from the exact screen they're stuck on —
+        a report, a live chat, or a screen session your agent can point and draw on. Every request lands on the
+        webhook you already run, so it plugs into whatever you support with today. No backend, no second app to host.
       </h2>
 
       <div class="code-box mb-6">
@@ -332,21 +333,10 @@
       </p>
 
       <div class="buttons is-centered mt-5">
-        <a href="#demo" class="btn-sl is-large"><i class="fas fa-play"></i> Try the simulated demo</a>
-        <a href="#docs" class="btn-sl btn-sl-ghost is-large"><i class="fas fa-book"></i> How it's installed</a>
+        <a href="#demo" class="btn-sl is-large"><i class="fas fa-play"></i> See it in action</a>
+        <a href="#docs" class="btn-sl btn-sl-ghost is-large"><i class="fas fa-book"></i> Two-minute setup</a>
       </div>
 
-      <div class="sl-flow">
-        <span class="sl-flow-step"><i class="fas fa-comment-dots"></i> User hits report</span>
-        <span class="sl-flow-arrow a-1">→</span>
-        <span class="sl-flow-step st-2"><i class="fas fa-user-shield"></i> Local blur + 1-frame snapshot</span>
-        <span class="sl-flow-arrow a-2">→</span>
-        <span class="sl-flow-step st-3"><i class="fas fa-paper-plane"></i> POST to your webhook</span>
-        <span class="sl-flow-arrow a-3">→</span>
-        <span class="sl-flow-step st-4"><i class="fas fa-link"></i> Agent opens the same page <code>?sl_role=agent</code></span>
-        <span class="sl-flow-arrow a-4">→</span>
-        <span class="sl-flow-step st-5"><i class="fas fa-wand-magic-sparkles fa-magic"></i> Point · draw · hand over text</span>
-      </div>
     </div>
   </div>
 </section>
@@ -356,33 +346,34 @@
     <div class="columns is-multiline">
       <div class="column is-3">
         <div class="box is-standard">
-          <div class="feature-icon"><i class="fas fa-plug"></i></div>
-          <h3 class="title is-5">One line to install</h3>
-          <p>Paste a script tag. No build step, no dependencies, no signup, and nothing to run on your server.</p>
+          <div class="feature-icon"><i class="fas fa-bolt"></i></div>
+          <h3 class="title is-5">Support, by default</h3>
+          <p>One script tag and every page in your app can raise a hand — no build step, no signup, nothing to run on your
+            server.</p>
         </div>
       </div>
       <div class="column is-3">
         <div class="box is-standard">
           <div class="feature-icon"><i class="fas fa-user-shield"></i></div>
-          <h3 class="title is-5">Redacted before capture</h3>
-          <p>Blur rules run on the page <em>first</em>, so the user sees the redaction in the share prompt. What you never
-            meant to collect never leaves the browser.</p>
+          <h3 class="title is-5">Their secrets stay theirs</h3>
+          <p>Blur rules run on the page before anything is captured, so passwords and cards never leave the browser — and
+            your user sees the redaction before they send.</p>
         </div>
       </div>
       <div class="column is-3">
         <div class="box is-standard">
-          <div class="feature-icon"><i class="fas fa-satellite-dish"></i></div>
-          <h3 class="title is-5">Live help, no backend</h3>
-          <p>Reports land on the webhook you already have. When a report isn't enough, you connect peer-to-peer — no relay,
-            no media server, no bill.</p>
+          <div class="feature-icon"><i class="fas fa-paper-plane"></i></div>
+          <h3 class="title is-5">Wired to your tools</h3>
+          <p>Requests POST to your webhook, so support lands wherever you already work — your inbox, a ticket queue, a Slack
+            channel. Change the endpoint, not your app.</p>
         </div>
       </div>
       <div class="column is-3">
         <div class="box is-standard">
           <div class="feature-icon"><i class="fas fa-crosshairs"></i></div>
-          <h3 class="title is-5">Point at the problem</h3>
-          <p>Your agent sees the customer's screen and draws right on it — spotlight the spot, sketch the fix, or hand over
-            text for them to confirm.</p>
+          <h3 class="title is-5">Show, don't explain</h3>
+          <p>When a report isn't enough, your agent joins the customer's screen and draws right on it — spotlight the broken
+            spot, sketch the fix, or hand over the exact text to type.</p>
         </div>
       </div>
     </div>
@@ -602,45 +593,80 @@ https://app.domain.com/checkout
   "use strict";
 
   /* ============================ background ============================ */
-  (function floatingIcons() {
+  /* Support requests popping up and fading away: a hand rises, waves a beat for
+     attention, then goes. Spawned over time rather than looping forever, so the
+     rhythm never reads as a heartbeat. */
+  (function wavingHands() {
     var container = document.getElementById("floating-container");
     if (!container) return;
-    var count = window.innerWidth < 700 ? 8 : 16;
-    for (var i = 0; i < count; i++) {
-      var ns = "http://www.w3.org/2000/svg";
-      var svg = document.createElementNS(ns, "svg");
-      svg.setAttribute("viewBox", "0 0 24 24");
-      svg.setAttribute("width", "70");
-      svg.setAttribute("height", "70");
-      svg.classList.add("floating-svg");
-      // Lifebuoy: ring + four spokes, drawn from primitives so it stays legible when blurred.
-      var ring = document.createElementNS(ns, "circle");
-      ring.setAttribute("cx", "12"); ring.setAttribute("cy", "12"); ring.setAttribute("r", "7");
-      svg.appendChild(ring);
-      var inner = document.createElementNS(ns, "circle");
-      inner.setAttribute("cx", "12"); inner.setAttribute("cy", "12"); inner.setAttribute("r", "3");
-      svg.appendChild(inner);
-      [[-1, -1], [1, -1], [1, 1], [-1, 1]].forEach(function (d) {
-        var line = document.createElementNS(ns, "line");
-        line.setAttribute("x1", String(12 + d[0] * 3.2)); line.setAttribute("y1", String(12 + d[1] * 3.2));
-        line.setAttribute("x2", String(12 + d[0] * 7)); line.setAttribute("y2", String(12 + d[1] * 7));
-        svg.appendChild(line);
-      });
+    if (window.matchMedia && window.matchMedia("(prefers-reduced-motion: reduce)").matches) return;
 
-      var depth = Math.random() * 10;
-      var scale = 0.5 + depth * 0.25;
-      var blur = Math.max(0, depth - 7);
-      svg.style.left = Math.random() * 110 - 5 + "%";
-      svg.style.setProperty("--drift", Math.random() * 500 - 250 + "px");
-      svg.style.setProperty("--rotation", Math.random() * 720 - 360 + "deg");
-      svg.style.filter = "blur(" + blur + "px)";
-      svg.style.transform = "scale(" + scale + ") rotate(" + Math.random() * 360 + "deg)";
-      svg.style.zIndex = String(Math.floor(depth));
-      svg.style.opacity = String(0.08 + depth * 0.035);
-      svg.style.animation = "float-up " + (25 + Math.random() * 30) + "s linear infinite";
-      svg.style.animationDelay = Math.random() * -50 + "s";
-      container.appendChild(svg);
+    var NS = "http://www.w3.org/2000/svg";
+    var wide = window.innerWidth > 760;
+    var maxAlive = wide ? 7 : 4;
+    var alive = 0;
+    window.__handsSpawned = 0;
+
+    /* Palm + four fingers + a thumb, from primitives so it stays legible when it's
+       small or blurred, plus one arc that reads as "waving". */
+    function handSvg() {
+      var svg = document.createElementNS(NS, "svg");
+      svg.setAttribute("viewBox", "0 0 26 30");
+      svg.setAttribute("aria-hidden", "true");
+      [[7, 13.5, 11, 12.5, 4.4], [7.1, 7.6, 2.3, 7.6, 1.5], [9.7, 5.6, 2.3, 9.6, 1.5],
+       [12.3, 6.2, 2.3, 9, 1.5], [14.9, 8.2, 2.3, 7, 1.5]].forEach(function (r) {
+        var el = document.createElementNS(NS, "rect");
+        el.setAttribute("x", String(r[0])); el.setAttribute("y", String(r[1]));
+        el.setAttribute("width", String(r[2])); el.setAttribute("height", String(r[3]));
+        el.setAttribute("rx", String(r[4]));
+        svg.appendChild(el);
+      });
+      var thumb = document.createElementNS(NS, "rect");
+      thumb.setAttribute("x", "3.8"); thumb.setAttribute("y", "14.8");
+      thumb.setAttribute("width", "2.4"); thumb.setAttribute("height", "6.8");
+      thumb.setAttribute("rx", "1.2"); thumb.setAttribute("transform", "rotate(-28 5 16)");
+      svg.appendChild(thumb);
+      var arc = document.createElementNS(NS, "path");
+      arc.setAttribute("d", "M20.6 6.6 a7.6 7.6 0 0 1 0 10.4");
+      svg.appendChild(arc);
+      return svg;
     }
+
+    function spawn() {
+      var size = wide ? 24 + Math.random() * 28 : 20 + Math.random() * 20;
+      var dur = 2.7 + Math.random() * 1.5;
+      var depth = Math.random();
+
+      var slot = document.createElement("div");
+      slot.className = "hand-slot";
+      slot.style.width = size + "px";
+      slot.style.height = size * 1.24 + "px";
+      slot.style.left = Math.random() * 94 + "%";
+      slot.style.bottom = Math.random() * 74 - 6 + "%";
+      slot.style.zIndex = String(Math.round(depth * 4));
+      slot.style.setProperty("--dur", dur.toFixed(2) + "s");
+      slot.style.setProperty("--peak", (0.11 + depth * 0.11).toFixed(3));
+      if (depth < 0.4) slot.style.filter = "blur(" + (1.5 - depth * 3.2).toFixed(1) + "px)";
+
+      var pop = document.createElement("div");
+      pop.className = "hand-pop";
+      pop.appendChild(handSvg());
+      slot.appendChild(pop);
+      container.appendChild(slot);
+
+      window.__handsSpawned++;
+      alive++;
+      window.setTimeout(function () {
+        if (slot.parentNode) slot.parentNode.removeChild(slot);
+        alive--;
+      }, dur * 1000 + 150);
+    }
+
+    function tick() {
+      if (!document.hidden && alive < maxAlive) spawn();
+      window.setTimeout(tick, 480 + Math.random() * 920);
+    }
+    window.setTimeout(tick, 250);
   })();
 
   /* ============================ copy buttons ============================ */

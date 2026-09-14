@@ -429,3 +429,38 @@ A new customer-side beat — *"Their screen goes with it"* — shows the share c
 moment they send, and a later assertion proves the chip survives the cut back to their side, because
 that is the whole claim. The story still runs seven narratives; the counter, dots, step indices and
 the per-step assertions all moved with it.
+
+## 2026-09-14 — Session 6: the hero sells the outcome, and the background asks for help
+
+**The hero was a description, not a pitch.** It opened with "See exactly what your users see. One script tag, no
+backend." and then spent four lines on the mechanism — one-frame snapshot, redaction pass, role parameters,
+full-screen agent view, relay servers, S3 buckets, SDKs — before a five-chip strip walked the reader through
+report → blur → POST → `?sl_role=agent` → draw. Everything true; none of it a reason to care. The value is
+simpler than the mechanism: **one line of code and your app has support built in, wired to the webhook you
+already run.** That is the headline now, and the four feature boxes state outcomes (support by default, their
+secrets stay theirs, wired to your tools, show don't explain) instead of internals. The `sl-flow` strip is gone
+outright, and the page title, description and social cards were retitled to match. Configuration detail stays in
+`INTEGRATION.md`, where a reader who has decided to care will look for it.
+
+**The lifebuoys became hands.** The old background drifted lifebuoy rings up the screen on long infinite loops.
+It now spawns **hands that pop up, wave for attention, and fade out** — one hand at a time, at a random spot and
+size, risen, waved, removed. Spawning on a timer rather than looping forever matters: an infinite loop reads as a
+heartbeat, while discrete arrivals and departures read as requests. The hand is built from primitives (palm, four
+fingers, a thumb, and one stroked motion arc) so it stays legible at 24px and when blurred, in SupportLayer's own
+teal — MailLayer is red-orange, PhoneLayer purple and ZipLayer pink, so teal is still unambiguously ours.
+
+Two properties were worth building in rather than discovering later. It is **silent under
+`prefers-reduced-motion`** — hidden in CSS *and* never spawned in JS, because a hidden element that never paints
+is still work. And it **takes no pointer events** and **pauses in a hidden tab**, so it can never intercept a
+click or animate a page nobody is looking at.
+
+**The new test failed twice, and both times the environment was talking, not the code.** Headless first: spawned
+43 times but zero hands in the DOM when sampled — the suite is on its third page by then, so `home` is
+backgrounded, and the spawner deliberately stops when `document.hidden`. Then headed: `spawned: 0`, because this
+host's desktop reports `prefers-reduced-motion: reduce`, so the background correctly never starts. The behaviour
+was right in both runs; the test was reading a paused animation and an inherited OS setting. It now forces the
+motion-allowed media feature — reloading, because the guard reads the query at load — and calls `bringToFront()`
+before it counts. `agents.md` records both traps so the next UI test against a paused page doesn't rediscover
+them.
+
+**Suite 183 → 188 checks**, green headless and headed.

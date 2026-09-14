@@ -11,7 +11,7 @@ dependencies, no framework.
   `window.SupportLayer`. There is no agent page: the agent loads the *customer's own URL*
   with `?sl_role=agent&peer=<id>` and this same script boots the agent view instead of
   the request button. Do not reintroduce a second HTML deliverable.
-- `index.html` — landing page: a pitch, a **scripted storyboard** (`.story`), and a pointer at
+- `index.html` — landing page: a **value-first hero**, a **scripted storyboard** (`.story`), and a pointer at
   `INTEGRATION.md`. Deliberately *not* the configuration reference and deliberately *not* an
   interactive demo. The MailLayer and PhoneLayer scripts are still loaded — a `mailto:` or `tel:`
   link on the page still gets upgraded, silently — but only one quiet footer line names the sister
@@ -206,6 +206,26 @@ splits the reader's attention and reads as a comparison chart rather than a stor
   on the problem at any pane width.
 - It must not grow into an interactive demo again. The interactive one lives in `room.html`.
 
+## The hero sells the outcome, and the background moves
+
+Two parts of the landing page are easy to over-explain or over-build:
+
+- **The hero is value, not mechanism.** The promise is one line of code and your app has support built in, wired
+  to the webhook you already run. The install snippet — and *only* the snippet — carries configuration detail;
+  the mechanism (one-frame snapshot, the blur pass, role parameters, transport) belongs in `INTEGRATION.md`, not
+  in the headline. **Do not let the hero grow back into a description of how it works** — no attribute table, no
+  step-by-step flow strip, no transport talk above the fold. There is no hero flow strip to reintroduce.
+- **The background is hands.** Support requests popping up and fading away: `wavingHands` spawns a hand at a
+  random spot on a timer, it rises, waves a beat for attention, then removes itself — spawned over time rather
+  than looping forever, so the rhythm never reads as a heartbeat. The hand is drawn from primitives (five `rect`s
+  plus one motion arc, stroked by the `.hand-slot svg path` rule) in SupportLayer's own teal; MailLayer is
+  red-orange, PhoneLayer purple, ZipLayer pink, so teal stays this project's. Two properties it must keep:
+  - **It respects `prefers-reduced-motion` twice over** — the CSS hides `.hand-slot` *and* the JS returns before
+    spawning anything. The suite asserts both, headless, by emulating the media feature.
+  - **It takes no pointer events** (`#bg-canvas` is `pointer-events: none`) and **pauses in a hidden tab**
+    (`document.hidden`). Because it pauses when hidden, any test that samples the hand count must call
+    `bringToFront()` first — otherwise it reads a deliberately frozen background as an empty one.
+
 ## Two roles, one document (`room.html`)
 
 The one place outside the widget where both roles run side by side: the same page loaded twice, customer and
@@ -223,11 +243,12 @@ reload/resume path silently dies. The suite loads `room.html` over HTTP for exac
 ## Testing
 
 - `npm start` then `node tests/e2e.mjs` (headless) or `node tests/e2e.mjs --headed`.
-- The suite must stay green in **both** modes on every change: 171 checks cover config parsing, the request flow,
+- The suite must stay green in **both** modes on every change: 188 checks cover config parsing, the request flow,
   redaction round-trips, coordinate accuracy (±12px), drawing auto-clear, directed typing, reload/resume, teardown,
-  the homepage storyboard (it plays itself to the end, cuts `customer,customer,customer,agent,agent,customer,
-  customer`, replays, and stacks on mobile), the two-role room, the mode matrix, the harness assertions, and
-  desktop/mobile layout. Headed runs have historically caught bugs headless missed (a loopback timer firing after
+  the homepage storyboard (it plays itself to the end, cuts
+  `customer,customer,customer,customer,agent,agent,customer,customer`, replays, and stacks on mobile), the
+  waving-hands background (spawned/painted/self-clearing, pointer-transparent, silent under reduced motion), the
+  two-role room, the mode matrix, the harness assertions, and desktop/mobile layout. Headed runs have historically caught bugs headless missed (a loopback timer firing after
   teardown, the always-visible draw hint).
 - **Idle pages must show zero agent chrome.** The overlay elements (`canvas.sl-draw`,
   `.sl-laser`, `.sl-draw-hint`, `.sl-typing`) all default to hidden and are only revealed

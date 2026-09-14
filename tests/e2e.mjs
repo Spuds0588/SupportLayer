@@ -888,7 +888,7 @@ async function main() {
         overflowX: document.documentElement.scrollWidth - window.innerWidth,
         heroFont: parseFloat(getComputedStyle(document.querySelector(".hero .title")).fontSize),
         sectionPad: parseFloat(getComputedStyle(document.querySelector("#demo")).paddingTop),
-        floatingIcons: document.querySelectorAll(".floating-svg").length,
+        bgPointerEvents: getComputedStyle(document.getElementById("bg-canvas")).pointerEvents,
         faIcons: document.querySelectorAll("svg.svg-inline--fa").length,
         boxRadius: getComputedStyle(box).borderRadius,
         stageW: Math.round(stage.width),
@@ -898,11 +898,44 @@ async function main() {
     check("no horizontal overflow on desktop", layout.overflowX <= 1, `overflow=${layout.overflowX}px`);
     check("hero headline is display-sized", layout.heroFont > 40, `${layout.heroFont}px`);
     check("section rhythm is applied", layout.sectionPad > 40, `${layout.sectionPad}px`);
-    check("floating background icons were generated", layout.floatingIcons > 5, `${layout.floatingIcons}`);
+    check("the background layer ignores pointer events", layout.bgPointerEvents === "none", layout.bgPointerEvents);
     check("Font Awesome rendered its icons", layout.faIcons > 5, `${layout.faIcons} svg icons`);
     check("family styling is in effect (Bulma loaded)", layout.boxRadius !== "0px", layout.boxRadius);
     check("the story is a single, centred window", layout.stageW > 600 && layout.stageW <= 800, `${layout.stageW}px`);
     check("the story viewport has real height", layout.viewportH > 300, `${layout.viewportH}px`);
+
+    group("waving-hands background");
+    /* Deterministic on any host. Some desktops (including this environment) report
+       prefers-reduced-motion, which silences the spawner *by design* — so the motion-allowed
+       branch has to be forced, and the page reloaded for the JS guard to re-read the query.
+       The reduced branch is asserted separately in its own group. */
+    await home.emulateMediaFeatures([{ name: "prefers-reduced-motion", value: "no-preference" }]);
+    await home.reload({ waitUntil: "domcontentloaded" });
+    await waitFor(() => home.evaluate(() => !!document.getElementById("floating-container")));
+    /* The spawner also stops in a hidden tab and other pages exist by now, so `home` must be
+       frontmost or this samples a deliberately paused animation. */
+    await home.bringToFront();
+    /* The background is a spawner, not a fixed set of elements: sample it over a few
+       seconds so an instant when no hand happens to be up can't read as "broken". */
+    const hands = await home.evaluate(async () => {
+      const seen = { spawned: 0, peak: 0, sawHand: false, drawn: false, pointerEvents: "" };
+      for (let i = 0; i < 34; i++) {
+        const slots = document.querySelectorAll(".hand-slot");
+        seen.spawned = window.__handsSpawned || 0;
+        if (slots.length > seen.peak) seen.peak = slots.length;
+        if (slots.length) {
+          seen.sawHand = true;
+          if (slots[0].querySelector("svg rect")) seen.drawn = true;
+          seen.pointerEvents = getComputedStyle(slots[0]).pointerEvents;
+        }
+        await new Promise((r) => setTimeout(r, 100));
+      }
+      return seen;
+    });
+    check("hands pop up in the background over time", hands.spawned >= 2, JSON.stringify(hands));
+    check("a spawned hand is actually drawn", hands.drawn, JSON.stringify(hands));
+    check("hands fade back out instead of piling up", hands.peak >= 1 && hands.peak <= 8, `peak ${hands.peak} at once`);
+    check("background hands never intercept clicks", hands.pointerEvents === "none", hands.pointerEvents);
 
     group("customer app layout");
 
@@ -951,6 +984,18 @@ async function main() {
     eq("nav links drop into the flow on mobile", mobile.navWrap, "static");
     check("the story window fits the mobile viewport", mobile.stageW > 280 && mobile.stageW <= 390, `${mobile.stageW}px`);
     if (HEADED) await home.screenshot({ path: path.join(SHOT_DIR, "mobile-headed.png") });
+
+    group("background respects reduced motion");
+    await home.emulateMediaFeatures([{ name: "prefers-reduced-motion", value: "reduce" }]);
+    await home.reload({ waitUntil: "domcontentloaded" });
+    await sleep(1800);
+    const reduced = await home.evaluate(() => ({
+      spawned: window.__handsSpawned || 0,
+      slots: document.querySelectorAll(".hand-slot").length,
+    }));
+    eq("no hands are spawned when motion is reduced", `${reduced.spawned}/${reduced.slots}`, "0/0");
+    await home.emulateMediaFeatures([]);
+
     await home.setViewport({ width: 1600, height: 1000 });
 
     /* ============================= harness page ============================= */
