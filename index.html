@@ -177,6 +177,10 @@
   @keyframes story-pulse { 0%, 100% { transform: scale(1); } 50% { transform: scale(1.07); } }
   .mock-panel { position: absolute; right: 12px; bottom: 12px; width: 250px; border-radius: 12px; background: #fff; border: 1px solid #e6e8ee; box-shadow: 0 18px 40px rgba(9,12,18,.28); overflow: hidden; }
   .mock-panel-head { padding: 9px 12px; font-weight: 800; font-size: 11.5px; background: #12151c; color: #fff; }
+  /* The share chip is the beat: it is what tells the customer (and the visitor) that the screen
+     is now the agent's, and it stays on for every step after this one. */
+  .mock-share { margin: 9px 12px 0; padding: 7px 9px; border-radius: 8px; background: #f0fdfa; border: 1px solid #14b8a6; color: #0f766e; font-size: 10.5px; font-weight: 800; align-items: center; gap: 7px; }
+  .mock-share i { width: 7px; height: 7px; border-radius: 50%; background: #14b8a6; flex: none; }
   .js-form { padding: 11px 12px 13px; }
   .mock-field { border: 1px solid #e6e8ee; border-radius: 8px; padding: 7px 9px; color: #949bab; font-size: 11.5px; }
   .mock-field-2 { margin-top: 7px; color: #12151c; }
@@ -230,8 +234,9 @@
      hidden uses display, not visibility — visibility hides the paint but keeps the box, which
      quietly padded the widget panel and left gaps in the chat. Only the absolutely-positioned
      overlays fade. */
-  .js-error, .js-panel, .js-form, .js-chat, .js-reply-1, .js-reply-2 { display: none; }
+  .js-error, .js-panel, .js-form, .js-chat, .js-share, .js-reply-1, .js-reply-2 { display: none; }
   .js-error.on, .js-panel.on, .js-form.on, .js-reply-1.on, .js-reply-2.on { display: block; }
+  .js-share.on { display: flex; }
   .js-chat.on { display: grid; }
   /* The FAB and the highlight toast belong to specific beats, not to the frame — they start
      hidden rather than being switched off partway, so step 0 is a plainly normal checkout. */
@@ -424,6 +429,7 @@
 
                 <div class="mock-panel js-panel">
                   <div class="mock-panel-head">Report an issue</div>
+                  <div class="mock-share js-share"><i></i> Your agent can see this screen</div>
                   <div class="js-form">
                     <div class="mock-field">What went wrong?</div>
                     <div class="mock-field mock-field-2">Complete purchase spins forever.</div>
@@ -493,6 +499,7 @@
           <li>A normal checkout — with one script tag on it. Nothing else to install.</li>
           <li>The payment fails. They ask for help without leaving the page they're on.</li>
           <li>They describe it. Redaction runs on the page, before anything is captured or sent.</li>
+          <li>Sending it starts the screen share, and it stays on for the whole session — ending the session is what stops it.</li>
           <li>The report lands where your team already works — your webhook, with a redacted snapshot.</li>
           <li>Your agent opens the link. It's the same URL, so it's the same page, dock and all.</li>
           <li>Point, draw, hand over text — and it lands live on the customer's own screen.</li>
@@ -524,9 +531,10 @@
                   "label":"What went wrong?"}]'</span>
 <span class="p">&gt;&lt;/script&gt;</span></code></pre>
           <p class="mt-4">Reports POST straight to a webhook you already own. Point <code>data-mode</code> at
-            <code>none</code> for async bug reports, or at <code>chat</code>, <code>audio</code> or <code>video</code> to
-            let a frustrated customer pull a human into the page with them. How they reach you is your call on that tag —
-            not a setting the user can flip.</p>
+            <code>none</code> for async bug reports, at <code>chat</code> for a live session they type through, or at
+            <code>video</code> for a two-way call. How they reach you is your call on that tag —
+            not a setting the user can flip. Either live mode carries their screen with it, and it stays shared until
+            the session ends.</p>
           <p class="mt-5"><a class="btn-sl" href="https://github.com/Spuds0588/SupportLayer/blob/main/INTEGRATION.md"
               target="_blank" rel="noopener"><i class="fas fa-book-open"></i> Integration guide</a></p>
           <p class="mt-3 is-size-7" style="color:#8b93a7">Every attribute, the exact webhook payload, framework recipes
@@ -673,6 +681,7 @@ https://app.domain.com/checkout
       { side: "customer", feature: "One script tag", hold: 1900 },
       { side: "customer", feature: "Help from the page itself", hold: 2000 },
       { side: "customer", feature: "Redacted before capture", hold: 2400 },
+      { side: "customer", feature: "Their screen goes with it", hold: 2800 },
       { side: "agent", feature: "Lands on your own webhook", hold: 2600 },
       { side: "agent", feature: "Same page, agent role", hold: 2400 },
       { side: "customer", feature: "Point · draw · hand over text", hold: 2600 },
@@ -701,6 +710,7 @@ https://app.domain.com/checkout
       session: pick(".js-session"),
       sessionSpot: pick(".js-session-spot"),
       ring: pick(".js-ring"),
+      share: pick(".js-share"),
       incoming: pick(".js-incoming"),
       reply1: pick(".js-reply-1"),
       reply2: pick(".js-reply-2"),
@@ -733,8 +743,8 @@ https://app.domain.com/checkout
       captions.forEach(function (li, i) { li.classList.toggle("on", i === n); });
       dots.forEach(function (d, i) { d.className = i === n ? "on" : i < n ? "done" : ""; });
       if (featureEl) featureEl.textContent = s.feature;
-      if (urlEl) urlEl.textContent = s.side === "agent" && n >= 4 ? CUSTOMER_URL + "?sl_role=agent" : s.side === "agent" ? "#support — where your team already works" : CUSTOMER_URL;
-      if (tagEl) tagEl.textContent = s.side === "agent" ? (n >= 4 ? "Same URL · agent role" : "Your team") : "Customer’s tab";
+      if (urlEl) urlEl.textContent = s.side === "agent" && n >= 5 ? CUSTOMER_URL + "?sl_role=agent" : s.side === "agent" ? "#support — where your team already works" : CUSTOMER_URL;
+      if (tagEl) tagEl.textContent = s.side === "agent" ? (n >= 5 ? "Same URL · agent role" : "Your team") : "Customer’s tab";
 
       var on = function (list) { list.forEach(function (e) { e.classList.add("on"); }); };
 
@@ -743,14 +753,17 @@ https://app.domain.com/checkout
       if (n >= 1) on(el.fab);
       if (n === 1) el.fab.forEach(function (e) { e.classList.add("pulse"); });
       if (n >= 2) { on(el.panel); el.fab.forEach(function (e) { e.classList.add("off"); }); }
-      if (n === 2) { on(el.form); on(el.redact); }
-      if (n >= 5) { on(el.ring); on(el.chat); on(el.incoming); on(el.reply1); }
-      if (n >= 6) on(el.reply2);
+      if (n === 2 || n === 3) { on(el.form); on(el.redact); }
+      // From the moment they send it, the customer's own panel says the agent can see the screen —
+      // and it keeps saying it, because the share outlives every later beat.
+      if (n >= 3) on(el.share);
+      if (n >= 6) { on(el.ring); on(el.chat); on(el.incoming); on(el.reply1); }
+      if (n >= 7) on(el.reply2);
 
       // Agent's view
-      if (n === 3) on(el.notice);
-      if (n >= 3) el.idle.forEach(function (e) { e.classList.add("off"); });
-      if (n >= 4) { on(el.session); on(el.sessionSpot); }
+      if (n === 4) on(el.notice);
+      if (n >= 4) el.idle.forEach(function (e) { e.classList.add("off"); });
+      if (n >= 5) { on(el.session); on(el.sessionSpot); }
     }
 
     function stop() {

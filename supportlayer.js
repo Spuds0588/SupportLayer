@@ -1,5 +1,5 @@
 /*!
- * SupportLayer v2.0.0
+ * SupportLayer v2.1.0
  * Zero-backend, drop-in diagnostic + live P2P support widget for web applications.
  *
  * One script, two roles. The customer loads the page normally. The agent opens the
@@ -7,12 +7,21 @@
  * agent view instead of the request button: the customer's screen, a chat
  * transcript, and a floating dock of annotation tools. There is no second app.
  *
+ * Modes (`data-mode` / `?sl_mode=`), fixed by the integrator at install time:
+ *   - none   — async report only, no live channel at all.
+ *   - chat   — live session: the agent watches the screen and guides over text.
+ *   - video  — live session plus a two-way audio + video call.
+ *
  * Design rules that must not be broken (see agents.md / PRD-SupportLayer.md):
  *   - No middleware. Webhook POST + P2P WebRTC only.
  *   - YAGNI: native browser APIs, no screenshot/serializer libraries.
  *   - All coordinates on the wire are normalized 0.0-1.0, never pixels.
  *   - Widget UI lives in a Shadow DOM; privacy blur is applied to the host document.
  *   - Reports, privacy blur and screen capture only ever run in the customer role.
+ *   - The live mode is the integrator's choice, never a control in the widget.
+ *   - The customer's screen share is SESSION-SCOPED: it starts with the request and ends
+ *     when the session ends. The panel deliberately offers no way to stop it — an agent
+ *     who cannot see the screen cannot guide, which is the whole product.
  *
  * MIT License.
  */
@@ -23,7 +32,7 @@
    * 0. Small helpers
    * ====================================================================== */
 
-  var VERSION = "2.0.0";
+  var VERSION = "2.1.0";
   var STORAGE_KEY = "supportlayer_session";
   var RATE_KEY = "supportlayer_rate";
   var RATE_WINDOW_MS = 60 * 1000;
@@ -31,7 +40,13 @@
   var TARGET_STYLE_ID = "supportlayer-target-css";
   var DEFAULT_THEME = "#14b8a6";
   var DEFAULT_PEER_CDN = "https://unpkg.com/peerjs@1.5.5/dist/peerjs.min.js";
-  var MODES = ["none", "chat", "audio", "video"];
+  var MODES = ["none", "chat", "video"];
+  /**
+   * `audio` was a third live mode in 2.0. `video` already carries two-way audio, so voice-only
+   * added a UI branch without adding a capability. Anyone still passing it wants a call, so it
+   * maps to `video` rather than silently degrading to a report-only widget.
+   */
+  var LEGACY_MODES = { audio: "video" };
   var SWATCHES = ["#14b8a6", "#f59e0b", "#f43f5e", "#38bdf8"];
 
   function uuid() {
@@ -160,6 +175,20 @@
     return null;
   }
 
+  /**
+   * Same lookup, but a flag that was explicitly turned OFF must read as off. `param()` skips any
+   * empty value, so `?sl-demo=0` and `?sl-demo=false` can only be distinguished if we read the raw
+   * string: a value that is present but falsey is a deliberate "no", not an absent parameter.
+   */
+  function flagParam(names) {
+    for (var i = 0; i < names.length; i++) {
+      var raw = QUERY.get(names[i]);
+      if (raw === null) continue;
+      return !/^(0|false|no|off)$/i.test(String(raw).trim());
+    }
+    return null; // not mentioned at all
+  }
+
   var DEFAULT_FIELDS = [
     { name: "issue", type: "textarea", label: "What went wrong?", required: true, placeholder: "Describe the problem you ran into…" }
   ];
@@ -206,6 +235,16 @@
     webhook: dataAttr("webhook") || "",
     mode: (function () {
       var m = String(param("sl_mode") || dataAttr("mode") || "none").toLowerCase();
+      if (LEGACY_MODES[m]) {
+        console.warn(
+          '[SupportLayer] data-mode="' +
+            m +
+            '" is no longer a mode — use "video" for a two-way audio + video call. Using "' +
+            LEGACY_MODES[m] +
+            '".'
+        );
+        m = LEGACY_MODES[m];
+      }
       return MODES.indexOf(m) >= 0 ? m : "none";
     })(),
     theme: normalizeHex(dataAttr("theme") || DEFAULT_THEME),
@@ -213,7 +252,7 @@
     blurSelectors: splitPatterns(dataAttr("blur-selectors")),
     blurRegex: splitPatterns(dataAttr("blur-regex")),
     fields: parseFields(dataAttr("fields")),
-    demo: String(dataAttr("demo") || "false") === "true" || !!(param("sl-demo") || param("demo")),
+    demo: demoEnabled(),
     peerCdn: dataAttr("peer-cdn") || DEFAULT_PEER_CDN,
     liveBase: dataAttr("live-base") || null,
     color: normalizeHex(param("sl_color") || dataAttr("color") || SWATCHES[0]),
@@ -223,6 +262,17 @@
       chat: dataAttr("chat-label") || "Support chat"
     }
   };
+
+  /**
+   * Demo mode is a development fixture, so it may be turned on by an attribute or a param — and
+   * turned back OFF by a param, which is how a real-mode session points at a page that ships with
+   * `data-demo="true"` (see tests/live-session.mjs).
+   */
+  function demoEnabled() {
+    var flag = flagParam(["sl-demo", "demo"]);
+    if (flag !== null) return flag;
+    return String(dataAttr("demo") || "false") === "true";
+  }
 
   var AGENT = CFG.role === "agent";
   var LIVE_MODES = CFG.mode !== "none";
@@ -241,7 +291,7 @@
   var state = STATES.IDLE;
 
   var session = null; // customer only: { id, state, status, mode, peerId, createdAt, updatedAt, liveUrl, userData, snapshotAt }
-  var liveStream = null; // customer screen share (live modes, user opted in)
+  var sharePromise = null; // in-flight getDisplayMedia request, so one request means one prompt
   var lastSnapshot = null; // data URL kept in memory only — never persisted
 
   function storageGet(key) {
@@ -462,10 +512,8 @@
     return !!(navigator.mediaDevices && navigator.mediaDevices.getDisplayMedia);
   }
 
-  function supportsUserMedia(kind) {
-    if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) return false;
-    if (kind === "video") return true;
-    return true;
+  function supportsUserMedia() {
+    return !!(navigator.mediaDevices && navigator.mediaDevices.getUserMedia);
   }
 
   function stopStream(stream) {
@@ -540,8 +588,77 @@
     return { dataUrl: canvas.toDataURL("image/jpeg", 0.7), width: w, height: h, label: "simulated" };
   }
 
+  /** One 70% JPEG frame off a display stream. Never stops the stream — a live session keeps it. */
+  function frameFromStream(stream) {
+    return new Promise(function (resolve) {
+      var video = document.createElement("video");
+      video.muted = true;
+      video.playsInline = true;
+      video.setAttribute("aria-hidden", "true");
+      video.style.cssText = "position:fixed;left:-10000px;top:0;width:1px;height:1px;opacity:0;";
+      document.body.appendChild(video);
+      video.srcObject = stream;
+
+      var label = "";
+      try {
+        label = stream.getVideoTracks()[0].label || "";
+      } catch (e) {
+        /* ignore */
+      }
+
+      var settled = false;
+      function finish() {
+        if (settled) return;
+        settled = true;
+        var out = null;
+        try {
+          var maxW = 1280;
+          var scale = Math.min(1, maxW / video.videoWidth);
+          var canvas = document.createElement("canvas");
+          canvas.width = Math.round(video.videoWidth * scale);
+          canvas.height = Math.round(video.videoHeight * scale);
+          canvas.getContext("2d").drawImage(video, 0, 0, canvas.width, canvas.height);
+          out = {
+            dataUrl: canvas.toDataURL("image/jpeg", 0.7),
+            width: canvas.width,
+            height: canvas.height,
+            label: label
+          };
+        } catch (e) {
+          console.warn(LOG_PREFIX, "snapshot render failed:", e && e.message);
+        }
+        try {
+          video.srcObject = null;
+          video.remove();
+        } catch (e) {
+          /* ignore */
+        }
+        resolve(out);
+      }
+
+      function ready() {
+        // Wait one more frame so the compositor has a real frame, not a black one.
+        requestAnimationFrame(function () {
+          requestAnimationFrame(finish);
+        });
+      }
+
+      video.onloadedmetadata = function () {
+        video.play().then(ready, ready);
+      };
+      video.onerror = finish;
+      setTimeout(finish, 4000); // hard safety net
+    });
+  }
+
   /**
-   * Real capture: momentary getDisplayMedia → first useful frame → 70% JPEG → tracks killed.
+   * The report's one-frame snapshot.
+   *
+   * In a live mode this is deliberately the *same* capture the agent will watch: the customer is
+   * asked for their screen once, when they send the request, and that stream is kept for the
+   * session (see beginScreenShare). Two separate getDisplayMedia calls would mean two permission
+   * prompts for one request.
+   *
    * MUST be invoked from a trusted user gesture. Resolves to null when the user declines.
    */
   function getScreenSnapshot() {
@@ -554,68 +671,19 @@
     }
     if (!supportsCapture()) return Promise.resolve(null);
 
+    if (LIVE_MODES) {
+      return beginScreenShare().then(function (stream) {
+        return stream ? frameFromStream(stream) : null;
+      });
+    }
+
+    // Report-only: capture the snapshot, then hand the screen straight back.
     return navigator.mediaDevices
       .getDisplayMedia({ video: { frameRate: 5, width: { ideal: 1920 }, height: { ideal: 1080 } }, audio: false })
       .then(function (stream) {
-        return new Promise(function (resolve) {
-          var video = document.createElement("video");
-          video.muted = true;
-          video.playsInline = true;
-          video.setAttribute("aria-hidden", "true");
-          video.style.cssText = "position:fixed;left:-10000px;top:0;width:1px;height:1px;opacity:0;";
-          document.body.appendChild(video);
-          video.srcObject = stream;
-
-          var label = "";
-          try {
-            label = stream.getVideoTracks()[0].label || "";
-          } catch (e) {
-            /* ignore */
-          }
-
-          var settled = false;
-          function finish() {
-            if (settled) return;
-            settled = true;
-            var out = null;
-            try {
-              var maxW = 1280;
-              var scale = Math.min(1, maxW / video.videoWidth);
-              var canvas = document.createElement("canvas");
-              canvas.width = Math.round(video.videoWidth * scale);
-              canvas.height = Math.round(video.videoHeight * scale);
-              canvas.getContext("2d").drawImage(video, 0, 0, canvas.width, canvas.height);
-              out = {
-                dataUrl: canvas.toDataURL("image/jpeg", 0.7),
-                width: canvas.width,
-                height: canvas.height,
-                label: label
-              };
-            } catch (e) {
-              console.warn(LOG_PREFIX, "snapshot render failed:", e && e.message);
-            }
-            try {
-              video.srcObject = null;
-              video.remove();
-            } catch (e) {
-              /* ignore */
-            }
-            stopStream(stream);
-            resolve(out);
-          }
-
-          function ready() {
-            // Wait one more frame so the compositor has a real frame, not a black one.
-            requestAnimationFrame(function () {
-              requestAnimationFrame(finish);
-            });
-          }
-
-          video.onloadedmetadata = function () {
-            video.play().then(ready, ready);
-          };
-          video.onerror = finish;
-          setTimeout(finish, 4000); // hard safety net
+        return frameFromStream(stream).then(function (snap) {
+          stopStream(stream);
+          return snap;
         });
       })
       .catch(function (err) {
@@ -782,8 +850,8 @@
    * ====================================================================== */
 
   var media = {
-    screen: null, // customer: local display stream (or "simulated")
-    av: null, // local mic (+camera) stream (or "simulated")
+    screen: null, // customer: local display stream for the whole session (or "simulated")
+    av: null, // customer: local mic + camera stream (or "simulated")
     remote: null, // agent: customer camera+mic / customer: agent camera+mic
     calls: [] // active PeerJS calls so teardown can close them
   };
@@ -916,6 +984,15 @@
     ".sl-composer button { flex: none; padding: 10px 15px; border-radius: 11px; border: 0; background: var(--sl-theme); color: var(--sl-on-theme); font-weight: 700; font-size: 13px; }",
     ".sl-call-bar { display: flex; gap: 8px; margin-top: 10px; flex-wrap: wrap; }",
     ".sl-call-bar button { flex: 1 1 auto; padding: 9px 11px; border-radius: 10px; font-size: 12px; font-weight: 600; border: 1px solid rgba(255,255,255,.12); background: rgba(255,255,255,.06); color: #dfe4ee; }",
+    ".sl-share-state { display: flex; align-items: center; gap: 8px; padding: 9px 12px; border-radius: 11px; font-size: 12px; font-weight: 600; border: 1px solid rgba(255,255,255,.1); background: rgba(255,255,255,.05); color: #cfd6e2; }",
+    ".sl-share-state .sl-share-dot { width: 8px; height: 8px; border-radius: 50%; background: #6b7385; flex: none; }",
+    ".sl-share-state[data-state=on] { border-color: rgba(20,184,166,.45); background: rgba(20,184,166,.12); color: #9fe9dc; }",
+    ".sl-share-state[data-state=on] .sl-share-dot { background: #14b8a6; box-shadow: 0 0 0 4px rgba(20,184,166,.18); animation: sl-pulse-teal 1.8s ease-out infinite; }",
+    "@keyframes sl-pulse-teal { 0% { box-shadow: 0 0 0 0 rgba(20,184,166,.45); } 100% { box-shadow: 0 0 0 9px rgba(20,184,166,0); } }",
+    ".sl-share-state[data-state=off] { border-color: rgba(245,158,11,.4); background: rgba(245,158,11,.1); color: #f7d08a; }",
+    ".sl-share-state[data-state=off] .sl-share-dot { background: #f59e0b; }",
+    ".sl-share-state.sl-share-inline { flex: 1 1 100%; order: -1; }",
+    ".sl-share-state[hidden] { display: none; }",
 
     /* ---------- overlay layers (laser + drawing + typing) ---------- */
     ".sl-overlay { position: fixed; inset: 0; pointer-events: none; z-index: 1; }",
@@ -1355,8 +1432,15 @@
 
   function renderStageEmpty() {
     if (!ui.stageEmpty) return;
-    ui.stageEmpty.hidden = state === STATES.CONNECTED || feedLive();
+    ui.stageEmpty.hidden = feedLive();
     if (ui.stageEmpty.hidden) return;
+    if (state === STATES.CONNECTED) {
+      // Connected but no picture: say what is actually happening rather than showing a blank stage.
+      ui.stageEmpty.innerHTML =
+        "<strong>Connected — waiting for their screen…</strong>" +
+        "<span>The customer's share starts with their request and runs until the session ends, so this should only be a moment.</span>";
+      return;
+    }
     ui.stageEmpty.innerHTML =
       '<div class="sl-spin"></div><strong>Waiting for a customer to connect…</strong>' +
       "<span>Open the link from the support webhook — it points at the customer's own page you are already on.</span>" +
@@ -1385,11 +1469,20 @@
       CFG.mode === "none"
         ? "Tell us what happened and we'll attach a snapshot plus diagnostics."
         : CFG.mode === "video"
-        ? "Tell us what happened, then jump on a video call — they can point, draw, and type on your screen."
-        : CFG.mode === "audio"
-        ? "Tell us what happened, then talk it through — they can point, draw, and type on your screen."
-        : "Tell us what happened, then chat live — they can point, draw, and type on your screen.";
-    var html = "<h3>" + esc(head) + "</h3><p>" + esc(blurb) + "</p><form novalidate>";
+        ? "Tell us what happened, then start a two-way video call — they see your screen and your camera, so they can point, draw and talk it through with you."
+        : "Tell us what happened, then chat live — they see your screen, so they can point at the right thing and hand you the exact text to type.";
+    // Consent for the screen share has to be read before it is given, so the contract is stated
+    // here — on the form — rather than only once the session is already live.
+    var html =
+      "<h3>" +
+      esc(head) +
+      "</h3><p>" +
+      esc(blurb) +
+      "</p>" +
+      (LIVE_MODES
+        ? '<p class="sl-note">Your screen is shared with the agent for the whole session — that is how they can see what you see. Ending the session is what stops it.</p>'
+        : "") +
+      "<form novalidate>";
 
     CFG.fields.forEach(function (f) {
       var id = fieldId(f.name);
@@ -1428,7 +1521,9 @@
       (CFG.blurSelectors.length || CFG.blurRegex.length
         ? "Sensitive fields on this page are blurred <strong>before</strong> anything is captured. "
         : "") +
-      "A one-frame snapshot is attached to your report. You can decline the screen prompt and still send it." +
+      (LIVE_MODES
+        ? "Everything on this page is captured once, when you send this — the agent watches from there, and declining the screen prompt leaves you with chat only."
+        : "A one-frame snapshot is attached to your report. You can decline the screen prompt and still send it.") +
       "</p>";
 
     view.innerHTML = html;
@@ -1497,20 +1592,50 @@
     });
   }
 
+  /* One source of truth for "can the agent see this screen right now", shared by both customer
+     views. Note what is absent: any control that stops the share. Ending the session is the
+     only thing that does, and the copy says so before the customer ever sends the request. */
+  var SHARE_STATE_HTML =
+    '<div class="sl-share-state" data-state="starting"><span class="sl-share-dot"></span>' +
+    '<span class="sl-share-text">Starting your screen share…</span></div>';
+  var SHARE_STATE_INLINE_HTML =
+    '<div class="sl-share-state sl-share-inline" data-state="starting"><span class="sl-share-dot"></span>' +
+    '<span class="sl-share-text">Starting your screen share…</span></div>';
+
+  function paintShareState(scope) {
+    if (!scope || !scope.querySelector) return;
+    var el = scope.querySelector(".sl-share-state");
+    if (!el) return;
+    var state = screenShared() ? "on" : session && session.shareAttempted ? "off" : "starting";
+    el.setAttribute("data-state", state);
+    var text = el.querySelector(".sl-share-text");
+    if (text) {
+      text.textContent =
+        state === "on"
+          ? "Your agent can see this screen"
+          : state === "off"
+          ? "Not shared — the agent can't see your screen"
+          : "Starting your screen share…";
+    }
+    var btn = scope.querySelector('[data-act="resume-share"]');
+    if (btn) btn.hidden = state !== "off" || !LIVE_MODES;
+  }
+
   function buildWaiting() {
     ui.views.waiting.innerHTML =
       '<div class="sl-center"><div class="sl-spin"></div><h3>Waiting for an agent</h3>' +
       '<p class="sl-wait-meta">Your report was delivered. Keep this page open — an agent can join in a moment.</p></div>' +
+      SHARE_STATE_HTML +
       '<div class="sl-link"><div class="sl-mono sl-live-url"></div></div>' +
       '<button class="sl-btn sl-btn-ghost" type="button" data-act="copy">Copy agent link</button>' +
-      '<div class="sl-row"><button class="sl-btn sl-btn-ghost" type="button" data-act="share">Share my screen</button>' +
+      '<div class="sl-row"><button class="sl-btn sl-btn-ghost" type="button" data-act="resume-share" hidden>Share my screen again</button>' +
       '<button class="sl-btn sl-btn-ghost" type="button" data-act="end">Cancel</button></div>' +
       '<p class="sl-note sl-wait-note"></p>';
     ui.views.waiting.querySelector('[data-act="copy"]').addEventListener("click", function () {
       copyText(session && session.liveUrl ? session.liveUrl : "", "Agent link copied");
     });
-    ui.views.waiting.querySelector('[data-act="share"]').addEventListener("click", function () {
-      shareScreen();
+    ui.views.waiting.querySelector('[data-act="resume-share"]').addEventListener("click", function () {
+      beginScreenShare().then(renderChrome);
     });
     ui.views.waiting.querySelector('[data-act="end"]').addEventListener("click", function () {
       endSession("cancelled");
@@ -1521,13 +1646,14 @@
     var mode = CFG.mode;
     var html =
       '<div class="sl-live-head"><span class="sl-status"><span class="sl-pulse"></span><span class="sl-live-status">Agent connected</span></span>' +
-      '<span class="sl-pill sl-live-mode">' + esc(mode) + "</span>" +
+      '<span class="sl-pill sl-live-mode"></span>' +
       '<span class="sl-mono sl-live-id"></span></div>' +
       '<div class="sl-media" hidden></div>' +
       '<div class="sl-transcript" role="log" aria-live="polite"></div>' +
       '<form class="sl-composer" novalidate><input type="text" placeholder="Message the agent…" aria-label="Message the agent"><button type="submit">Send</button></form>' +
       '<div class="sl-call-bar">' +
-      '<button class="sl-btn-ghost" type="button" data-act="screen">' + ICONS.screen + " Share my screen</button>" +
+      SHARE_STATE_INLINE_HTML +
+      '<button class="sl-btn-ghost" type="button" data-act="resume-share" hidden>Share my screen again</button>' +
       '<button class="sl-btn-ghost" type="button" data-act="mic" hidden>Mute</button>' +
       '<button class="sl-btn-ghost" type="button" data-act="cam" hidden>Turn off camera</button>' +
       '<button class="sl-btn-ghost sl-danger" type="button" data-act="end">End</button>' +
@@ -1535,8 +1661,8 @@
       '<p class="sl-note">' +
       (mode === "none"
         ? ""
-        : "The agent can point at things and highlight fields. Nothing is ever typed into your page without you seeing it first. ") +
-      "Screen sharing stays opt-in and stops the moment you close it." +
+        : "Your screen stays shared for this session — that is how the agent can point at the right thing. " +
+          "Ending the session is what stops it. Nothing is ever typed into your page without you seeing it first.") +
       "</p>";
     ui.views.live.innerHTML = html;
 
@@ -1550,8 +1676,8 @@
       var input = this.querySelector("input");
       if (sendChat(input.value)) input.value = "";
     });
-    ui.views.live.querySelector('[data-act="screen"]').addEventListener("click", function () {
-      shareScreen();
+    ui.views.live.querySelector('[data-act="resume-share"]').addEventListener("click", function () {
+      beginScreenShare().then(renderChrome);
     });
     ui.views.live.querySelector('[data-act="mic"]').addEventListener("click", function () {
       toggleMic();
@@ -1596,11 +1722,11 @@
   function renderLive() {
     if (!ui.liveMedia) return;
     var mode = CFG.mode;
-    ui.liveModeChip.textContent = mode;
+    // The chip is inert text that names the channel the integrator chose — never a control.
+    ui.liveModeChip.textContent = mode === "video" ? "Live video call" : "Live chat";
     ui.liveStatus.textContent = transportFailed ? "Agent connected (degraded)" : "Agent connected";
 
-    var screenOn = !!media.screen;
-    var avOn = mode === "audio" || mode === "video";
+    var avOn = mode === "video";
     var tiles = [];
     var remote = media.remote && typeof media.remote !== "string" ? media.remote : null;
     var remoteVideo = remote && remote.getVideoTracks().length ? new MediaStream(remote.getVideoTracks()) : null;
@@ -1617,7 +1743,7 @@
           '<div class="sl-audio-bar' + (micOn() ? "" : " sl-muted") + '"><span class="sl-wave"><i></i><i></i><i></i><i></i></span>' +
             "<span>" +
             (CFG.demo
-              ? "Simulated " + (mode === "video" ? "video" : "audio") + " call · mic " + (micOn() ? "live" : "muted")
+              ? "Simulated video call · mic " + (micOn() ? "live" : "muted")
               : micOn()
               ? "Call connected · waiting for their mic…"
               : "You are muted") +
@@ -1637,10 +1763,7 @@
     var audioEl = ui.liveMedia.querySelector("audio.sl-remote-audio");
     if (audioEl && remoteAudio) plug(audioEl, remoteAudio);
 
-    var screenBtn = ui.views.live.querySelector('[data-act="screen"]');
-    screenBtn.classList.toggle("sl-on", screenOn);
-    screenBtn.innerHTML = ICONS.screen + " " + (screenOn ? "Stop sharing" : "Share my screen");
-    screenBtn.hidden = mode === "none" || (!supportsCapture() && !CFG.demo);
+    paintShareState(ui.views.live);
 
     var micBtn = ui.views.live.querySelector('[data-act="mic"]');
     micBtn.hidden = !avOn;
@@ -1666,14 +1789,12 @@
     var liveUrl = session && session.liveUrl;
     ui.views.waiting.querySelector(".sl-live-url").textContent = liveUrl || "generating agent link…";
     ui.views.waiting.querySelector('[data-act="copy"]').hidden = !liveUrl;
-    ui.views.waiting.querySelector('[data-act="share"]').hidden = !LIVE_MODES || !!media.screen;
+    paintShareState(ui.views.waiting);
     var note = ui.views.waiting.querySelector(".sl-wait-note");
     if (!LIVE_MODES) {
       note.textContent = "This deployment is report-only (mode=none) — no live channel was opened.";
     } else if (transportFailed) {
       note.textContent = "Live channel unavailable (" + transportFailed + ") — your report still reached the team.";
-    } else if (media.screen) {
-      note.textContent = "You are sharing your screen with the support team.";
     } else {
       note.textContent = "";
     }
@@ -1862,7 +1983,10 @@
     var live = state === STATES.CONNECTED;
     ui.badge.classList.toggle("sl-live", live);
     var bits = [live ? "Connected" : transportFailed ? "Offline" : "Waiting"];
-    if (live) bits.push(clientMode());
+    if (live) {
+      bits.push(clientMode() === "video" ? "video call" : "chat");
+      bits.push(feedLive() ? "screen live" : "no screen yet");
+    }
     if (ag.client && ag.client.viewport) bits.push(ag.client.viewport.w + "×" + ag.client.viewport.h);
     if (CFG.demo) bits.push("simulated feed");
     ui.badge.innerHTML = '<b></b><span class="sl-badge-text">' + esc(bits.join(" · ")) + "</span>";
@@ -2507,10 +2631,10 @@
       }
     };
     log("incoming", kind, "call from the customer");
-    if (kind === "av" && (clientMode() === "audio" || clientMode() === "video")) {
+    if (kind === "av" && clientMode() === "video") {
       ensureLocalAV()
         .then(function (stream) {
-          if (stream) log("sharing my", clientMode() === "video" ? "camera + mic" : "mic");
+          if (stream) log("sharing my camera + mic");
           answer(stream);
         })
         .catch(function () {
@@ -2525,15 +2649,14 @@
     });
   }
 
-  /** Agent local mic/camera, only when the session actually calls for it. */
+  /** The agent's own mic + camera — only a video session needs them. */
   function ensureLocalAV() {
     if (CFG.demo) return Promise.resolve(null);
     if (media.av) return Promise.resolve(media.av);
-    var mode = clientMode();
-    if (mode !== "audio" && mode !== "video") return Promise.resolve(null);
-    if (!supportsUserMedia(mode)) return Promise.resolve(null);
+    if (clientMode() !== "video") return Promise.resolve(null);
+    if (!supportsUserMedia()) return Promise.resolve(null);
     return navigator.mediaDevices
-      .getUserMedia({ audio: true, video: mode === "video" })
+      .getUserMedia({ audio: true, video: true })
       .then(function (stream) {
         media.av = stream;
         if (ui.selfcam) {
@@ -2661,7 +2784,7 @@
       showAgentHint();
       // The hello carries the agent's peer id so the customer knows where to dial its
       // screen and camera streams back to. Without it the media never starts.
-      sendToClient({ t: "hello", agentPeerId: AGENT_ID });
+      sendToClient({ t: "hello", agentPeerId: selfPeerId() });
       sysChat("Connected to the customer.");
       sendChat("Hi! I'm looking at your screen now — tell me what you see.");
       renderAgentInfo();
@@ -2684,10 +2807,10 @@
     }
     toast("An agent joined your session.", "good");
     startCallMedia();
-    if (CFG.demo && LIVE_MODES && !media.screen) {
-      // The demo simulates the whole flow, so it also simulates the share gesture.
-      shareScreen();
-    }
+    // The share belongs to the session, so a session that has to start one starts it here too:
+    // an agent should never join to a blank stage. A decline is never retried silently.
+    if (LIVE_MODES && !media.screen && !(session && session.shareAttempted)) beginScreenShare();
+    if (LIVE_MODES) announceShareState();
     renderChrome();
   }
 
@@ -2846,14 +2969,15 @@
         if (ui.feed) ui.feed.classList.remove("sl-on");
         if (ui.sim) ui.sim.classList.remove("sl-on");
         renderAgentBadge();
-        agentToast("The customer stopped sharing.", "warn");
+        renderStageEmpty();
+        agentToast(msg.lost ? "The customer's screen is no longer shared." : "The customer stopped sharing.", "warn");
         break;
       case "simulated-media":
-        if (msg.kind === "video" && ui.camPh) {
+        if (ui.camPh) {
           ui.camPh.innerHTML = "Customer camera<br><em>simulated</em>";
           ui.camPh.classList.add("sl-on");
         }
-        agentToast(msg.kind === "video" ? "Simulated video call started." : "Simulated audio call started.");
+        agentToast("Simulated video call started.");
         break;
       case "pong":
         agentToast("Pong — round trip " + Math.max(0, Date.now() - (msg.at || Date.now())) + "ms");
@@ -2880,7 +3004,7 @@
   function greetCustomer() {
     if (!transport) return;
     if (state !== STATES.CONNECTED) onTransportConnected(transport.name);
-    else sendToClient({ t: "hello", agentPeerId: AGENT_ID });
+    else sendToClient({ t: "hello", agentPeerId: selfPeerId() });
   }
 
   /** Re-announce so a customer who reloaded the page gets picked back up. */
@@ -2889,6 +3013,18 @@
   }
 
   var AGENT_ID = "agent-" + Math.random().toString(36).slice(2, 9);
+
+  /**
+   * The id the customer must dial to send its screen back.
+   *
+   * This has to be the id the signalling broker actually registered for us. The customer's media
+   * call is a fresh PeerJS call to this string, so a locally invented one resolves to nothing: the
+   * broker answers `peer-unavailable` and the agent sits on a stage that never fills. It is assumed
+   * different from `AGENT_ID` (a per-page random) only over the loopback bus, which ignores ids.
+   */
+  function selfPeerId() {
+    return (transport && transport.peerId) || AGENT_ID;
+  }
 
   /* ====================================================================== *
    * 15. Customer-side host page controls (agent → this page)
@@ -3208,6 +3344,11 @@
     openPanel();
     renderChrome();
 
+    // The click's user gesture dies at the first await, and getDisplayMedia needs one — so the
+    // screen is asked for here. In a live mode this single capture is both the report's snapshot
+    // and the session's share; a report-only install asks later, only for the snapshot.
+    if (LIVE_MODES) beginScreenShare();
+
     // Privacy first, then capture — the user physically sees blurred data in the prompt/frame.
     var privacy = applyPrivacyBlur();
     session.privacy = privacy;
@@ -3292,11 +3433,8 @@
     transport = null;
     transportFailed = null;
     lastSnapshot = null;
-    stopStream(liveStream);
-    liveStream = null;
-    stopStream(media.screen);
+    stopSharing();
     stopStream(media.av);
-    media.screen = null;
     media.av = null;
     media.remote = null;
     detachRemoteStreams();
@@ -3348,78 +3486,137 @@
 
   /* ---------------------------- screen + call media ---------------------------- */
 
-  function shareScreen() {
-    if (media.screen) return stopSharing();
+  /**
+   * The customer's screen is the point of a live session: the agent guides against it, so the
+   * share is scoped to the session rather than to a toggle. It starts with the request and ends
+   * when the session ends, and no control in the panel can stop it in between.
+   *
+   * Browsers keep their own capture controls (Chrome's floating stop-sharing bar) and nothing on
+   * a page can remove those, so when the track ends for any reason we say so plainly on both sides
+   * and offer a one-tap resume. A resume needs a fresh gesture, which is why the first call has to
+   * come from one.
+   */
+  function screenShared() {
+    return !!media.screen;
+  }
+
+  /** Starts (or re-starts) the session's screen share. Resolves to the stream, or null. */
+  function beginScreenShare() {
+    if (media.screen) return Promise.resolve(media.screen);
+    if (!LIVE_MODES) return Promise.resolve(null);
     if (CFG.demo) {
       media.screen = "simulated";
-      sendToAgent({ t: "simulated-screen", on: true, viewport: { w: window.innerWidth, h: window.innerHeight } });
-      sysChat("You started sharing your screen (simulated).");
-      toast("Simulated screen share is on (demo mode — nothing is really captured).", "good");
-      renderChrome();
-      return;
+      onShareStarted(media.screen);
+      return Promise.resolve(media.screen);
     }
+    if (sharePromise) return sharePromise;
     if (!supportsCapture()) {
-      toast("This browser cannot share a screen.", "warn");
-      return;
+      if (session) session.shareAttempted = true;
+      toast("This browser cannot share a screen — you can still chat with the agent.", "warn");
+      return Promise.resolve(null);
     }
-    navigator.mediaDevices
+    sharePromise = navigator.mediaDevices
       .getDisplayMedia({ video: { frameRate: 12 }, audio: false })
       .then(function (stream) {
         media.screen = stream;
-        var track = stream.getVideoTracks()[0];
-        if (track) {
-          track.addEventListener("ended", function () {
-            stopSharing();
-          });
-        }
-        if (session && session.agentPeerId && transport && transport.callAgent) {
-          transport.callAgent(session.agentPeerId, stream, "screen");
-        }
-        sendToAgent({ t: "screen-share-began", viewport: { w: window.innerWidth, h: window.innerHeight } });
-        if (session) session.screenSharedAt = nowIso();
-        sysChat("You started sharing your screen.");
-        toast("You are sharing your screen with the agent.", "good");
-        renderChrome();
+        onShareStarted(stream);
+        return stream;
       })
       .catch(function (err) {
-        log("share declined:", err && err.name);
-        toast("Screen share was cancelled.", "warn");
+        log("share declined or unavailable:", err && err.name);
+        if (session) session.shareAttempted = true;
+        renderChrome();
+        return null;
+      })
+      .then(function (stream) {
+        sharePromise = null;
+        return stream;
       });
+    return sharePromise;
   }
 
-  function stopSharing() {
-    stopStream(media.screen);
-    media.screen = null;
-    sendToAgent({ t: "screen-share-ended" });
-    sysChat("You stopped sharing your screen.");
+  /** A capture stream is live: tell the agent, and wire it to the peer if there is one. */
+  function onShareStarted(stream) {
+    if (session) {
+      session.screenShared = true;
+      session.screenSharedAt = nowIso();
+      session.shareAttempted = true;
+      saveSession();
+    }
+    var track = stream && typeof stream !== "string" ? stream.getVideoTracks()[0] : null;
+    if (track) track.addEventListener("ended", onShareLost);
+    if (session && session.agentPeerId && transport && transport.callAgent) {
+      transport.callAgent(session.agentPeerId, stream, "screen");
+    }
+    announceShareState();
+    sysChat("Screen sharing is on — the agent can see this tab for as long as the session lasts.");
     renderChrome();
   }
 
-  /** Mic (+ camera) for audio/video sessions — the other half of the call. */
+  /** Keep the agent's stage honest about what it is looking at (or not looking at). */
+  function announceShareState() {
+    if (media.screen === "simulated") {
+      sendToAgent({ t: "simulated-screen", on: true, viewport: { w: window.innerWidth, h: window.innerHeight } });
+      return;
+    }
+    if (media.screen) {
+      sendToAgent({ t: "screen-share-began", viewport: { w: window.innerWidth, h: window.innerHeight } });
+    } else {
+      sendToAgent({ t: "screen-share-ended", lost: true });
+    }
+  }
+
+  /** The capture ended underneath us — the customer's browser control, or the tab shutting it down. */
+  function onShareLost() {
+    if (!media.screen) return;
+    stopStream(media.screen);
+    media.screen = null;
+    if (session) {
+      session.screenShared = false;
+      session.shareAttempted = true;
+      saveSession();
+    }
+    sendToAgent({ t: "screen-share-ended", lost: true });
+    sysChat("Screen sharing stopped — the agent can no longer see your screen.");
+    toast("Your screen is no longer being shared. Use “Share my screen again” to continue.", "warn");
+    renderChrome();
+  }
+
+  /** Teardown only: the session is over, so the share goes with it. */
+  function stopSharing() {
+    if (media.screen) stopStream(media.screen);
+    media.screen = null;
+    if (session) {
+      session.screenShared = false;
+      session.shareAttempted = true;
+    }
+  }
+
+  /** The customer's own mic + camera — video mode only. `chat` is screen + text by design. */
   function startCallMedia() {
-    if (!LIVE_MODES || CFG.mode === "chat") return;
+    if (!LIVE_MODES || CFG.mode !== "video") return;
     if (media.av) return;
     if (CFG.demo) {
       media.av = "simulated";
-      sendToAgent({ t: "simulated-media", kind: CFG.mode, on: true });
-      sysChat(CFG.mode === "video" ? "Simulated video call started." : "Simulated audio call started.");
+      sendToAgent({ t: "simulated-media", kind: "video", on: true });
+      sysChat("Simulated video call started.");
       renderChrome();
       return;
     }
-    if (!supportsUserMedia(CFG.mode)) return;
+    if (!supportsUserMedia()) return;
     navigator.mediaDevices
-      .getUserMedia({ audio: true, video: CFG.mode === "video" })
+      .getUserMedia({ audio: true, video: true })
       .then(function (stream) {
         media.av = stream;
         if (session && session.agentPeerId && transport && transport.callAgent) {
           transport.callAgent(session.agentPeerId, stream, "av");
         }
-        sysChat(CFG.mode === "video" ? "Video call started." : "Audio call started.");
+        sysChat("Video call started — your mic and camera are live.");
         renderChrome();
       })
       .catch(function (err) {
         log("mic/camera declined:", err && err.name);
-        toast("Microphone" + (CFG.mode === "video" ? "/camera" : "") + " permission was declined — you can still chat.", "warn");
+        toast("Microphone/camera permission was declined — you can still chat and share your screen.", "warn");
         renderChrome();
       });
   }
@@ -3516,6 +3713,8 @@
               connected: state === STATES.CONNECTED,
               demo: CFG.demo,
               peer: ag.targetPeer,
+              // The id the customer dials to send its screen back — the broker's, not a guess.
+              selfPeerId: selfPeerId(),
               mode: clientMode(),
               tool: ag.tool,
               color: ag.color,

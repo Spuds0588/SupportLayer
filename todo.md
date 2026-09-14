@@ -196,10 +196,39 @@ v2 collapsed the two-page design into one: the agent no longer has a page of the
 - [x] Steps are read only after they settle (700ms), since the views cross-fade over 450ms and the redaction
       reveal lands at 400ms — a short wait was asserting against a frame that lasts half a second.
 
+## Phase 12 — three modes and a session-scoped screen share  ✅ done
+- [x] Dropped the voice-only `audio` mode. `MODES` is now `none | chat | video`; `audio` maps to
+      `video` with a one-line console warning, so an existing tag keeps the call it asked for instead
+      of silently degrading to a report-only widget.
+- [x] The customer's screen share is **session-scoped**: it starts in the submit handler (the click's
+      gesture is what `getDisplayMedia` needs) and ends only with the session. Every stop control is
+      gone from the panel — waiting view, live view, and the call bar.
+- [x] One capture, not two. In a live mode `getScreenSnapshot()` reuses the share stream for the
+      report's one-frame JPEG, so the customer sees a single permission prompt.
+- [x] The contract is stated on the request form *before* consent, and again in the live panel.
+- [x] `onShareLost()` handles a track that dies underneath us (the browser's own capture bar): both
+      sides are told, the session survives, and a gesture-gated "Share my screen again" can restore it.
+- [x] Agent side stays honest: the badge reports the share state (`Connected · video call · screen
+      live`), and a connected-but-pictureless stage says "Connected — waiting for their screen…".
+- [x] Homepage storyboard gained a beat for the share (8 steps) that shows the chip on the customer's
+      panel and then proves it survives the cut back to their side.
+- [x] Suite 171 → 182 checks: the no-stop-control invariant (runtime *and* source-level), the share
+      contract on the form per mode, and a `audio mode is retired` group asserting the alias.
+
+### Live path  ✅ done (the old "unverified" backlog item)
+- [x] `tests/live-session.mjs` (`npm run live:check` / `live:session`): a real customer session in a
+      real browser, dialled by a second peer over real PeerJS, asserting a real screen track arrives
+      *and decodes a frame*. This was the repo's biggest untested surface.
+- [x] `flagParam()` + `?sl-demo=0`, so a page shipping `data-demo="true"` can be tested for real.
+      (`?demo=0` used to turn demo mode **on** — any value of the legacy param was truthy.)
+- [x] **Bug fixed:** the `hello` handshake advertised `AGENT_ID` (a per-page random) instead of the
+      broker-registered peer id, so every real deployment left the agent's stage permanently blank —
+      `peer-unavailable`, silently swallowed. `selfPeerId()` fixes it; the demo suite passes either
+      way because the loopback bus ignores ids.
+- [x] VERSION / package.json / docs at **2.1.0**, with the two breaking changes named in INTEGRATION §13.
+
 ## Backlog (explicitly not in v2)
 - [ ] Multiparty sessions / multiple agents per session.
-- [ ] A real two-browser WebRTC pass: `getDisplayMedia` permission flow and live agent media
-      have only been exercised over the loopback bus. The media stack itself is unverified.
 - [ ] Optional `data-position` placement attribute for the FAB.
 - [ ] Webhook retry queue for offline submissions.
 - [ ] Auto-fit the agent dock on very short viewports (it wraps, but a <360px-tall stage is

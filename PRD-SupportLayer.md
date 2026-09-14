@@ -12,6 +12,18 @@
 > the session: chat, or a **two-way** audio/video call, as fixed by `data-mode` at install time
 > (never switchable in-session). See `agents.md` for the current architecture rules and
 > `INTEGRATION.md` for the current contract. Everything else in this document still applies.
+>
+> **AMENDMENT (v2.1, 2026-09-14) — modes and the screen share.** Two corrections to the text below:
+> 1. There are **three** modes, not four: `none`, `chat`, `video`. Voice-only `audio` is gone —
+>    `video` already carries two-way audio, so a separate mode added a UI branch and no capability.
+>    The old value is still accepted and maps to `video` with a console warning.
+> 2. The customer's screen share is **scoped to the session and cannot be stopped from the panel**.
+>    It starts with the request (one `getDisplayMedia` call serves as both the report snapshot and
+>    the live share) and ends when the session ends. The contract is stated on the request form,
+>    before consent. Wherever §4 or §5 says the user opts in to sharing mid-session, that is
+>    superseded: a customer-held stop control destroys the product's only real advantage — the agent
+>    guiding against a screen they can actually see. The browser's own capture indicator is outside
+>    our reach; if the track ends, both sides are told and the customer can resume with one tap.
 
 ## Part 1: Product Requirements Document (PRD)
 
@@ -30,7 +42,7 @@
 *   **Security Context Boundaries:** Remote typing is handled via "Directed Typing" (prompts to copy/paste) rather than synthetic keystrokes to ensure compatibility with modern SPAs (React, Vue) and respect browser security sandboxing.
 
 ### 1.4 Core Features & Requirements
-1.  **Drop-In Configuration:** Support JSON-based dynamic form fields, theming (single hex code), and modes (`none`, `chat`, `audio`, `video`) via `<script>` tag attributes.
+1.  **Drop-In Configuration:** Support JSON-based dynamic form fields, theming (single hex code), and modes (`none`, `chat`, `video`, with `audio` deprecated to `video`) via `<script>` tag attributes.
 2.  **Privacy Redaction:** Support CSS selector and Regex-based text node blurring applied locally to the DOM prior to screen capture.
 3.  **Async Bug Reporting (Mode: None):** Capture a Base64 JPEG snapshot of the viewport (via momentary `getDisplayMedia`) to send a rich webhook payload without exceeding standard size limits.
 4.  **Live P2P Support (Mode: Chat+):** Establish a PeerJS WebRTC data/video channel for real-time interaction.
@@ -92,7 +104,7 @@ The script executes a `POST` request to the provided webhook. It fires `support_
   }
 }
 ```
-*Note: `snapshot` is `null` if the user opts out of screen sharing or if it is a `support_update` event.*
+*Note: `snapshot` is `null` if the user declines the screen prompt, or if it is a `support_update` event. In a live mode declining means the agent cannot see the screen at all — the session still connects and the panel offers a one-tap resume.*
 
 ### 2.4 Headless API
 If `data-headless="true"`, the floating action button (FAB) is suppressed, and the developer can manually trigger the flow via standard DOM elements:

@@ -1,13 +1,15 @@
 {
   "name": "supportlayer",
-  "version": "2.0.0",
+  "version": "2.1.0",
   "private": true,
   "description": "SupportLayer — zero-backend drop-in diagnostic and live P2P support widget. One script, two roles: the same file serves the customer and the agent. No runtime dependencies.",
   "scripts": {
     "start": "node serve.js",
     "test": "node tests/e2e.mjs",
     "test:headed": "node tests/e2e.mjs --headed",
-    "test:live": "node tests/e2e.mjs --base https://spuds0588.github.io/SupportLayer"
+    "test:live": "node tests/e2e.mjs --base https://spuds0588.github.io/SupportLayer",
+    "live:session": "node tests/live-session.mjs",
+    "live:check": "node tests/live-session.mjs --check"
   },
   "devDependencies": {
     "puppeteer-core": "24.10.0"

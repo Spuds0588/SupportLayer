@@ -63,7 +63,8 @@ dependencies, no framework.
 ## Deliverable surface (`supportlayer.js`)
 
 - **Config** comes from `document.currentScript.dataset`: `webhook`, `mode`
-  (`none|chat|audio|video`), `theme`, `headless`, `blur-selectors`, `blur-regex`,
+  (`none|chat|video`, with `audio` a deprecated alias for `video`), `theme`, `headless`,
+  `blur-selectors`, `blur-regex`,
   `fields` (JSON, `try/catch` parsed, defaults to a single `textarea`), `demo`,
   `peer-cdn`, `live-base`, `color`, `label`/`title`/`chat-label`.
 - **Role is a URL param, not an attribute.** `?sl_role=agent` (or `data-role="agent"`) flips
@@ -73,6 +74,16 @@ dependencies, no framework.
   `data-mode` / `?sl_mode=` selects it and the customer's request panel simply *becomes* the
   chat thread or the call. There is intentionally **no in-session switcher**: neither the user
   nor the agent can turn a chat into a call. Do not add one.
+- **The screen share is session-scoped and the customer cannot stop it.** In a live mode
+  `beginScreenShare()` runs from the submit handler (the click's gesture is what `getDisplayMedia`
+  needs, and the click's promise chain must not await first) and its stream is reused by
+  `getScreenSnapshot()` as the report's one-frame snapshot — one prompt, not two. It ends with
+  `stopSharing()` and nowhere else. `onShareLost()` covers a track that dies underneath us (the
+  browser's own capture control): it says so on both sides and offers a gesture-gated resume.
+  Above all: **`paintShareState()` must never render a stop control**, and no "Share my screen" /
+  "Stop sharing" toggle may come back. The agent guiding against a screen the customer can revoke is
+  not this product. `audio` is a deprecated alias for `video` for the same reason — a mode that adds
+  no capability is a branch that rots.
 - **`liveSessionUrl(peerId)`** builds the agent link as the customer's own `location.href`
   plus `sl_role=agent&peer=<id>` (plus `sl-demo=1` in demo mode). `data-live-base` overrides
   the base. This is what lands in the webhook payload as `live_session_url`.
@@ -99,6 +110,12 @@ dependencies, no framework.
 - **`[hidden] { display: none !important; }` is declared in the shadow stylesheet on purpose.**
   Without it, any overlay carrying its own `display` value (`.sl-draw-hint`) stays visible and
   blocks host clicks even while `hidden` is set.
+- **`selfPeerId()` — never a local random — is what goes in the `hello` handshake.** The agent tells
+  the customer which id to dial with its screen (`agentPeerId`), and that call is a real PeerJS call
+  to that string. `AGENT_ID` is a per-page random that no broker knows about; advertising it means
+  the customer calls a peer that does not exist, PeerJS answers `peer-unavailable` (which the error
+  handler deliberately swallows), and the agent's stage stays blank forever. The loopback bus ignores
+  ids, so the whole demo suite passes either way — only `tests/live-session.mjs` can see it.
 - **One file, two roles — never a second deliverable.** `agent.html` existed once and was removed:
   it duplicated the app shell, drifted from the widget, and broke on static-file CDNs (which serve
   `.html` as `text/plain`, so the console rendered as source code). The agent role now needs no page
@@ -109,6 +126,23 @@ dependencies, no framework.
 - **The loopback announce loop must die with its transport.** It stops on connect, on
   `close()`, and after 200 tries, and it captures `peerId` locally instead of reading
   `session` — otherwise a timer fires after teardown and throws on a null session.
+
+## Testing the live path (`tests/live-session.mjs`)
+
+The demo suite (`tests/e2e.mjs`) runs the product over the loopback `BroadcastChannel` bus with
+synthetic capture. That is honest about widget logic and coordinates and useless for three things:
+PeerJS signalling, the `getDisplayMedia` permission flow, and a real media track. `live-session.mjs`
+covers exactly those, in a real browser, with no `data-demo`:
+
+```bash
+npm run live:check      # two headless peers: verifies the path, then exits (exit 1 on failure)
+npm run live:session    # opens a customer session and prints the agent URL, staying open
+```
+
+It turns the demo fixture into a real session with `demo-app.html?sl-demo=0` — which is why
+`flagParam()` exists: an explicit `sl-demo=0` must be able to override `data-demo="true"`, or a page
+that ships as a demo could never be tested for real. Run it before touching transport, media or the
+role handshake.
 
 ## Agent experience (`?sl_role=agent&peer=<clientPeerId>`)
 

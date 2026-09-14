@@ -350,3 +350,82 @@ for half a second. **Suite 157 → 171 checks.**
 **Cosmetic fixes the screenshots asked for:** the feature chip wrapped onto two lines next to the progress dots
 (nowrap + `flex: none`), and the mock checkout was thin enough to look half-built, so it gained a shipping row
 and a billing line.
+
+## 2026-09-14 — Session 6: three modes, a share the customer cannot revoke, and the real path tested
+
+### Modes: `none` · `chat` · `video`
+
+Voice-only `audio` is gone. `video` already carries two-way audio, so the third mode bought a UI
+branch and no capability. `MODES` is now three values, and `data-mode="audio"` maps to `video` with a
+one-line console warning rather than falling through to `none` — someone passing it asked for a call,
+and silently downgrading them to a report-only widget would be the worse surprise. Every
+`=== "audio"` branch is deleted: the form copy, `renderLive`'s `avOn`, the simulated call label,
+`onIncomingCall`, `ensureLocalAV`, `startCallMedia`, `supportsUserMedia`.
+
+### The screen share is now the session's, not the customer's
+
+The panel used to offer "Share my screen" and then "Stop sharing". Both are gone, along with the whole
+`shareScreen()` toggle. The share now starts in the submit handler — the click's gesture is what
+`getDisplayMedia` needs, and the click's promise chain must not await before it — and ends only with
+the session. One capture, not two: `getScreenSnapshot()` reuses the share stream for the report's
+one-frame JPEG, so the customer sees a single permission prompt where they used to get two.
+
+The contract moved onto the form, before consent: *"Your screen is shared with the agent for the whole
+session."* A new `.sl-share-state` chip reports the truth on both customer views (`on` / `off` /
+`starting`), and `onShareLost()` handles a track that dies underneath us — the browser's own capture
+bar is outside our reach — by telling both sides, keeping the session up, and offering a gesture-gated
+"Share my screen again".
+
+Agent side got the same honesty: the badge reads `Connected · video call · screen live · 1260×820` or
+`no screen yet`, and a connected-but-pictureless stage says *"Connected — waiting for their screen…"*
+instead of rendering an empty frame.
+
+The form footer used to promise *"You can decline the screen prompt and still send it"* in every mode.
+In a live mode that is now false, so it says what actually happens instead.
+
+### A real bug, found by finally testing the real path
+
+The suite runs everything over the loopback bus, which ignores peer ids — so nothing noticed that the
+`hello` handshake advertised `AGENT_ID` (a per-page random) instead of the id the PeerJS broker had
+actually registered. The customer's media call is a real call to that string: the broker answered
+`peer-unavailable`, which the error handler deliberately swallows, and **the agent's stage stayed
+blank forever** while the customer's panel cheerfully said the agent could see their screen. Every
+real deployment was broken and no test could see it. `selfPeerId()` now returns the transport's own
+id (falling back to `AGENT_ID` only over loopback).
+
+### `tests/live-session.mjs` — the path a real integrator ships
+
+```
+npm run live:check     # two real peers: real capture, real PeerJS, real track, exits 1 on failure
+npm run live:session   # opens a customer session and prints the agent URL to open yourself
+```
+
+To make a demo fixture testable for real it needed an off switch, so `flagParam()` was added and
+`?sl-demo=0` now overrides `data-demo="true"`. Before this, `?demo=0` turned demo mode *on* — any
+value of the legacy param was truthy.
+
+First `live:check` run after the fix:
+
+```
+✓ the agent role boots from the printed URL
+✓ the agent side is not in demo mode
+✓ the two peers establish a real WebRTC session
+✓ the agent advertises the peer id its broker actually registered   sl-eck72hb9lm
+✓ a real screen track reaches the agent stage                       tracks=1
+✓ the track is actually painting                                    800x450
+✓ the agent badge reports reality                                   screen live
+```
+
+### Suite 171 → 183 checks
+
+New: the share is on and the panel says so; **no** stop-sharing control anywhere in the panel
+(runtime) and no `"Stop sharing"` label (source); the share contract is asserted present on `chat`
+and `video` forms and absent on `none`; the `hello` handshake may not advertise `AGENT_ID`; and an
+`audio mode is retired` group asserting the alias resolves to `video` and warns.
+
+### Homepage storyboard: 7 → 8 steps
+
+A new customer-side beat — *"Their screen goes with it"* — shows the share chip land on the panel the
+moment they send, and a later assertion proves the chip survives the cut back to their side, because
+that is the whole claim. The story still runs seven narratives; the counter, dots, step indices and
+the per-step assertions all moved with it.

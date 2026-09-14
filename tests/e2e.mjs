@@ -243,7 +243,7 @@ async function main() {
         : null;
     });
     check("the storyboard is on the page", !!storyShell, JSON.stringify(storyShell));
-    eq("the storyboard can reach every step", storyShell?.steps, 7);
+    eq("the storyboard can reach every step", storyShell?.steps, 8);
     /* Asserted against the story's own step count, not a literal: the shipped storyboard had
        seven steps and six captions, so its payoff frame cleared the caption line and sat there
        blank — and a hardcoded 6 was holding that in place. */
@@ -278,6 +278,7 @@ async function main() {
           fab: vis(".js-fab"),
           session: vis(".js-session"),
           sessionSpot: vis(".js-session-spot"),
+          share: vis(".js-share"),
           notice: vis(".js-notice"),
           url: document.getElementById("story-url").textContent,
           tag: document.getElementById("story-tag").textContent,
@@ -295,7 +296,7 @@ async function main() {
 
     // Every step the story can reach, so the perspective claim is checked, not assumed.
     const sides = [];
-    for (let n = 0; n <= 6; n++) {
+    for (let n = 0; n <= 7; n++) {
       await home.evaluate((i) => window.__story.goto(i), n);
       await sleep(SETTLE);
       const s = await storyState();
@@ -309,27 +310,41 @@ async function main() {
       if (n === 2) {
         check("step 2 shows the redaction, on the customer's side", s.side === "customer" && s.redact && s.panel, JSON.stringify(s));
         check("the widget replaces the button rather than stacking on it", !s.fab, JSON.stringify(s));
+        check("the screen is not shared yet at the redaction beat", !s.share, JSON.stringify(s));
       }
       if (n === 3) {
-        check("step 3 cuts to the agent to show the report arriving", s.side === "agent" && s.notice && !s.session, JSON.stringify(s));
-        check("the agent's beat never shows the customer's request panel", !s.panel && !s.error, JSON.stringify(s));
+        check(
+          "step 3 shows the screen going with the request",
+          s.side === "customer" && s.share && s.panel && !s.session && !s.notice,
+          JSON.stringify(s)
+        );
       }
       if (n === 4) {
-        check("step 4 keeps the agent's view and opens the session", s.side === "agent" && s.session && s.sessionSpot && !s.notice, JSON.stringify(s));
-        check("the agent's window is the customer's own URL in the agent role", /sl_role=agent/.test(s.url) && /agent role/.test(s.tag), `${s.url} / ${s.tag}`);
+        check("step 4 cuts to the agent to show the report arriving", s.side === "agent" && s.notice && !s.session, JSON.stringify(s));
+        check("the agent's beat never shows the customer's request panel", !s.panel && !s.error, JSON.stringify(s));
       }
       if (n === 5) {
-        check("step 5 cuts back to the customer to show the help landing", s.side === "customer" && s.ring && s.incoming && s.chat, JSON.stringify(s));
+        check("step 5 keeps the agent's view and opens the session", s.side === "agent" && s.session && s.sessionSpot && !s.notice, JSON.stringify(s));
+        check("the agent's window is the customer's own URL in the agent role", /sl_role=agent/.test(s.url) && /agent role/.test(s.tag), `${s.url} / ${s.tag}`);
+      }
+      if (n === 6) {
+        check("step 6 cuts back to the customer to show the help landing", s.side === "customer" && s.ring && s.incoming && s.chat, JSON.stringify(s));
         check("the agent's own chrome is not visible once the customer's side has settled", !s.session && !s.sessionSpot && !s.notice, JSON.stringify(s));
+        // The share outlives the beat that introduced it — that is the whole point of it.
+        check("the share chip is still on screen after the perspective cuts back", s.share, JSON.stringify(s));
       }
     }
     check("the story uses both perspectives", sides.includes("customer") && sides.includes("agent"), sides.join(","));
-    check("it cuts back and forth rather than sitting on one side", sides.join(",") === "customer,customer,customer,agent,agent,customer,customer", sides.join(","));
+    check(
+      "it cuts back and forth rather than sitting on one side",
+      sides.join(",") === "customer,customer,customer,customer,agent,agent,customer,customer",
+      sides.join(",")
+    );
 
     // Play it the way a visitor does: scroll to it and let the observer start it.
     await shownInViewport(home, "#story");
     const reachedEnd = await waitFor(
-      () => home.evaluate(() => Number(document.getElementById("story").getAttribute("data-step")) === 6),
+      () => home.evaluate(() => Number(document.getElementById("story").getAttribute("data-step")) === 7),
       { timeout: 25000 }
     );
     check(
@@ -346,7 +361,7 @@ async function main() {
     check("the feature line points at a real property", finalFrame.feature.length > 3, finalFrame.feature);
     eq("exactly one caption is highlighted", finalFrame.activeCaptions, 1);
     eq("exactly one progress dot is active", finalFrame.activeDots, 1);
-    eq("there is a progress dot per step", finalFrame.dots, 7);
+    eq("there is a progress dot per step", finalFrame.dots, 8);
 
     await clickSelector(home, "#story-replay");
     const rewound = await waitFor(
@@ -355,7 +370,7 @@ async function main() {
     );
     check("replay rewinds the story", rewound, `step ${await home.evaluate(() => document.getElementById("story").getAttribute("data-step"))}`);
     const endedAgain = await waitFor(
-      () => home.evaluate(() => Number(document.getElementById("story").getAttribute("data-step")) === 6),
+      () => home.evaluate(() => Number(document.getElementById("story").getAttribute("data-step")) === 7),
       { timeout: 25000 }
     );
     check("the replayed story reaches the same end", endedAgain);
@@ -547,13 +562,62 @@ async function main() {
         hasComposer: !!live.querySelector(".sl-composer input"),
         hasTranscript: !!live.querySelector(".sl-transcript"),
         actions: Array.prototype.map.call(live.querySelectorAll(".sl-call-bar button"), (b) => b.textContent.trim()),
-        screenOn: live.querySelector('[data-act=screen]').textContent.includes("Stop"),
+        shareState: (() => {
+          const el = live.querySelector(".sl-share-state");
+          return el ? { state: el.getAttribute("data-state"), text: el.textContent.trim() } : null;
+        })(),
       };
     });
     check("the request panel became the live session panel", customerPanel.active && customerPanel.formGone, JSON.stringify(customerPanel));
     check("the live panel is a chat (transcript + composer)", customerPanel.hasComposer && customerPanel.hasTranscript);
     check("video sessions expose call controls", customerPanel.actions.join("|").includes("Mute"), customerPanel.actions.join("|"));
-    check("the demo simulates the screen share so the agent has a feed", customerPanel.screenOn);
+    check(
+      "the demo simulates the screen share so the agent has a feed",
+      customerPanel.shareState && customerPanel.shareState.state === "on",
+      JSON.stringify(customerPanel.shareState)
+    );
+
+    /* ---------- the screen share belongs to the session, not to a toggle ----------
+     * An agent who cannot see the screen cannot guide, which is the whole product. So the live
+     * panel deliberately has no way to stop sharing: the customer consents once, when they send
+     * the request, and ending the session is the only thing that stops it. If this fails, someone
+     * has handed the customer a control that blinds the agent mid-session. */
+    group("screen share is session-scoped");
+    const shareFacts = await customerFrame.evaluate(() => {
+      const root = document.querySelector("#supportlayer-root").shadowRoot;
+      const labels = Array.prototype.map.call(root.querySelectorAll("button"), (b) => b.textContent.trim());
+      const state = root.querySelector(".sl-share-state");
+      return {
+        sessionShared: !!((window.SupportLayer.getSession() || {}).screenShared),
+        state: state ? state.getAttribute("data-state") : null,
+        stateText: state ? state.textContent.trim() : "",
+        stopControls: labels.filter((t) => /stop sharing|stop screen|end sharing/i.test(t)),
+        labels,
+      };
+    });
+    check("the session reports a live share", shareFacts.sessionShared, JSON.stringify(shareFacts));
+    check("the panel tells the customer the agent can see this screen", /can see this screen/i.test(shareFacts.stateText), shareFacts.stateText);
+    check(
+      "no stop-sharing control exists anywhere in the panel",
+      shareFacts.stopControls.length === 0,
+      shareFacts.stopControls.join(" | ") || shareFacts.labels.join(" | ")
+    );
+    const widgetCode = readFileSync(path.join(ROOT, "supportlayer.js"), "utf8");
+    check("the widget source has no 'Stop sharing' label", !/["']Stop sharing["']/.test(widgetCode));
+    check("the widget offers no screen-share toggle to begin with", !/shareScreen\s*\(/.test(widgetCode), "shareScreen() came back");
+    check(
+      "the share is announced to the agent and started by the session, not by a control",
+      /screen-share-began/.test(widgetCode) && /beginScreenShare/.test(widgetCode)
+    );
+    /* The `hello` handshake tells the customer which peer id to dial with its screen. Over the
+       loopback bus ids are ignored, so advertising a locally invented one costs nothing here and
+       costs the whole session over real signalling — the customer calls a peer that does not exist
+       and the agent's stage stays empty forever. tests/live-session.mjs exercises the real path;
+       this pins the rule where it is cheap to check. */
+    check(
+      "the hello handshake advertises the broker's peer id, not a local guess",
+      /agentPeerId: selfPeerId\(\)/.test(widgetCode) && !/agentPeerId: AGENT_ID/.test(widgetCode)
+    );
 
     /* ---------- the channel is the developer's decision, not a user control ----------
      * `data-mode` picks the channel at install time and the panel simply BECOMES that channel.
@@ -563,7 +627,7 @@ async function main() {
     const switcherScan = async (frame, label) =>
       frame.evaluate(() => {
         const root = document.querySelector("#supportlayer-root").shadowRoot;
-        const names = ["chat", "audio", "video"];
+        const names = ["chat", "video"];
         const suspects = [];
         root.querySelectorAll("select, [data-mode], [data-channel], [data-seg], .sl-seg, [role=tablist], [role=radiogroup], [role=tab]").forEach((el) => {
           if (el.tagName === "SELECT") {
@@ -589,7 +653,7 @@ async function main() {
     );
     check(
       "the mode is shown as inert text, not a control",
-      customerSwitcher.chipTag === "span" && customerSwitcher.chipText === "video",
+      customerSwitcher.chipTag === "span" && /video call/i.test(customerSwitcher.chipText || ""),
       JSON.stringify(customerSwitcher)
     );
     const agentSwitcher = await switcherScan(agentFrame);
@@ -1018,10 +1082,9 @@ async function main() {
      * shape the request panel itself — copy and controls — with no user-facing switcher. */
     group("mode matrix");
     const MODE_SPEC = {
-      none: { head: "Send a report", button: "Send report", blurb: /snapshot/i, call: false },
-      chat: { head: "Start a live session", button: "Start session", blurb: /chat live/i, call: false },
-      audio: { head: "Start a live session", button: "Start session", blurb: /talk it through/i, call: false },
-      video: { head: "Start a live session", button: "Start session", blurb: /video call/i, call: false },
+      none: { head: "Send a report", button: "Send report", blurb: /snapshot/i, shareNote: false },
+      chat: { head: "Start a live session", button: "Start session", blurb: /chat live/i, shareNote: true },
+      video: { head: "Start a live session", button: "Start session", blurb: /two-way video call/i, shareNote: true },
     };
     for (const mode of Object.keys(MODE_SPEC)) {
       const spec = MODE_SPEC[mode];
@@ -1036,7 +1099,7 @@ async function main() {
       const form = await modePage.evaluate(() => {
         const root = document.querySelector("#supportlayer-root").shadowRoot;
         const v = root.querySelector(".sl-view[data-view=form]");
-        const names = ["chat", "audio", "video"];
+        const names = ["chat", "video"];
         const switchers = [];
         root.querySelectorAll("select, [data-seg], [role=tablist], [role=radiogroup]").forEach((el) => {
           if (el.tagName === "SELECT") {
@@ -1048,6 +1111,7 @@ async function main() {
           head: v.querySelector("h3").textContent.trim(),
           button: v.querySelector("button[type=submit]").textContent.trim(),
           blurb: v.querySelector("p").textContent.trim(),
+          shareNote: (v.querySelector(".sl-note") || {}).textContent || "",
           switchers,
         };
       });
@@ -1055,8 +1119,43 @@ async function main() {
       eq(`mode=${mode}: submit button label`, form.button, spec.button);
       check(`mode=${mode}: the panel describes that channel`, spec.blurb.test(form.blurb), form.blurb);
       check(`mode=${mode}: no channel switcher in the panel`, form.switchers.length === 0, form.switchers.join(",") || "clean");
+      // The share contract has to be stated before the customer consents, not after.
+      check(
+        `mode=${mode}: the screen-share contract is ${spec.shareNote ? "stated up front" : "absent"}`,
+        spec.shareNote === /shared with the agent for the whole session/i.test(form.shareNote),
+        form.shareNote.slice(0, 120)
+      );
       await modePage.close();
     }
+
+    /* ------------------------ retired: the voice-only mode ------------------------
+     * `audio` was a third live mode. `video` already carries two-way audio, so the third mode
+     * bought a UI branch and no capability. An existing tag must keep working — its author
+     * asked for a call, and they still get one — but `audio` is not a mode any more. */
+    group("audio mode is retired");
+    const legacyPage = await browser.newPage();
+    watch(legacyPage, "mode=audio");
+    await legacyPage.setContent(
+      `<!doctype html><html><body><script src="${BASE}/supportlayer.js" data-webhook="" data-mode="audio" data-demo="true"></script></body></html>`,
+      { waitUntil: "domcontentloaded" }
+    );
+    const legacyBooted = await waitFor(() => legacyPage.evaluate(() => !!(window.SupportLayer && window.SupportLayer.config)), { timeout: 6000 });
+    eq(
+      'data-mode="audio" still buys a live call',
+      legacyBooted ? await legacyPage.evaluate(() => window.SupportLayer.config.mode) : null,
+      "video"
+    );
+    check(
+      "the alias is announced rather than applied silently",
+      consoleWarnings.some((e) => /no longer a mode/.test(e.text)),
+      JSON.stringify(consoleWarnings.slice(0, 3))
+    );
+    eq(
+      "MODES no longer lists audio",
+      await legacyPage.evaluate(() => window.SupportLayer.config.mode === "audio"),
+      false
+    );
+    await legacyPage.close();
 
     /* ============================= console hygiene ============================= */
     group("console hygiene");
@@ -1065,6 +1164,15 @@ async function main() {
     // The intentional "invalid data-fields" warning is expected exactly once.
     const unexpected = ownErrors.filter((e) => !e.text.includes("data-fields"));
     check("no unexpected console errors from SupportLayer pages", unexpected.length === 0, JSON.stringify(unexpected.slice(0, 4)));
+    // Browser noise (parser-blocking document.write, autoplay policy) is not ours to police;
+    // what matters is that the widget only warns about the things it documents.
+    const ownWarnings = consoleWarnings.filter((e) => e.text.includes("[SupportLayer]"));
+    const unexpectedWarnings = ownWarnings.filter((e) => !e.text.includes("data-fields") && !/no longer a mode/.test(e.text));
+    check(
+      "the only SupportLayer-authored warnings are the documented ones",
+      unexpectedWarnings.length === 0,
+      JSON.stringify(unexpectedWarnings.slice(0, 4))
+    );
     check("no uncaught page errors", pageErrors.length === 0, JSON.stringify(pageErrors.slice(0, 4)));
 
     const ownFailedRequests = failedRequests.filter((r) => r.url.startsWith(origin));

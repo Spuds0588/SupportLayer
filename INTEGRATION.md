@@ -17,7 +17,7 @@ A single `<script>` tag adds a support button to a page. When a user clicks it:
 2. It captures **one** frame of the user's screen as a 70%-quality JPEG (the browser asks first; the
    capture stream is killed immediately afterwards).
 3. It POSTs a JSON payload — diagnostics + form answers + that one frame — to **your** webhook.
-4. In `chat`/`audio`/`video` mode it also opens a **peer-to-peer** channel so an agent can point at
+4. In `chat`/`video` mode it also opens a **peer-to-peer** channel so an agent can point at
    things, draw on the user's screen, and hand over text for review.
 
 There is no SupportLayer server. The only third-party infrastructure is the PeerJS **signalling**
@@ -43,7 +43,7 @@ Put this immediately before `</body>`, once per page load:
 Pin an **immutable ref** rather than `@main` in production, so an upstream push cannot change your site
 under you. Either a commit SHA
 (`@8e18b349cb623f85f7638ae55fff709c8e63b74d` — always valid, no release step) or a release tag once you
-create one (`@v2.0.0`). `@main` is fine for evaluation and for this demo site; it is not a pin.
+create one (`@v2.1.0`). `@main` is fine for evaluation and for this demo site; it is not a pin.
 
 > **There is no separate agent page to deploy — on any hosting option.** The library ships one file
 > and both roles. What the agent opens is *your own page* with `?sl_role=agent&peer=<id>` appended,
@@ -85,7 +85,7 @@ media-src   'self' blob:
 
 ### HTTPS
 
-`getDisplayMedia` (the snapshot) and `getUserMedia` (audio/video modes) only work on `https://` or
+`getDisplayMedia` (the share) and `getUserMedia` (video mode) only work on `https://` or
 `localhost`. On plain `http://` the widget degrades gracefully: the payload is still delivered with
 `snapshot: null`.
 
@@ -93,19 +93,39 @@ media-src   'self' blob:
 
 ## 2. Choose a mode
 
-| `data-mode` | Snapshot + webhook | Live P2P channel | Extra |
+| `data-mode` | Snapshot + webhook | Live screen share | Extra |
 | --- | --- | --- | --- |
 | `none` *(default)* | ✅ | ❌ | Async ticket only. Nothing peers, nothing signals. |
-| `chat` | ✅ | ✅ | Agent laser-click, draw, and directed typing. |
-| `audio` | ✅ | ✅ | `chat`, plus **two-way** audio: the agent's microphone to the user and the user's back. |
-| `video` | ✅ | ✅ | `chat`, plus **two-way** audio and video, both directions. |
+| `chat` | ✅ | ✅ | Agent laser-click, draw, and directed typing, over text. |
+| `video` | ✅ | ✅ | `chat`, plus a **two-way** audio + video call in both directions. |
 
 **The mode is the developer's decision and is fixed at install time.** There is deliberately no
 in-session channel switcher: the user cannot turn a chat into a call, and neither can the agent. Pick
 the mode per surface (a `none` marketing page, a `video` billing flow) and let it be.
 
-Screen sharing is **always** a separate explicit action ("Share my screen"). The snapshot at request
-time is the only thing captured by default — do not change that without a strong reason.
+`audio` was a third live mode in 2.0. `video` already carries two-way audio, so voice-only bought a UI
+branch and no capability; the value is now an alias for `video` (it warns on the console and boots a
+call rather than silently degrading to a report). Nothing else changes.
+
+### The screen share is scoped to the session, not to a toggle
+
+In a live mode the customer's screen **is** the session. There is no "Share my screen" button and no
+"Stop sharing" button anywhere in the panel:
+
+- The share starts with the request. The click that sends the form is the gesture `getDisplayMedia`
+  needs, and that single capture is used for *both* the report's snapshot and the live share, so the
+  customer sees one permission prompt, not two.
+- It runs until the session ends. `End` (or `SupportLayer.endSession()`) stops the tracks and tears the
+  session down; nothing else does.
+- The contract is stated on the form, before the customer consents — "Your screen is shared with the
+  agent for the whole session". Do not move that copy to after the fact.
+- Browsers keep their own capture controls (Chrome's floating stop-sharing bar) and a page cannot
+  remove them. If the track ends for any reason, both sides are told plainly, the session stays up,
+  and the customer gets a one-tap **Share my screen again** — `getDisplayMedia` needs a fresh gesture,
+  so it cannot be resumed automatically.
+
+If you fork the panel, keep this shape. A stop control for the customer looks harmless and quietly
+removes the product's whole advantage: the agent watching the screen they are guiding against.
 
 If your app has no agent workflow yet, start with `mode="none"`. It is the whole product minus the
 live channel, and it needs no broker and no CSP entry beyond your webhook.
@@ -120,7 +140,7 @@ must think about; the rest have working defaults.
 | Attribute | Type | Default | Notes |
 | --- | --- | --- | --- |
 | `data-webhook` | URL | *(empty)* | POST target. **If empty, the payload is built and discarded silently.** |
-| `data-mode` | `none` `chat` `audio` `video` | `none` | Anything else silently falls back to `none`. |
+| `data-mode` | `none` `chat` `video` | `none` | Anything else silently falls back to `none`. `audio` is deprecated and maps to `video`. |
 | `data-theme` | hex | `#14b8a6` | Brand colour. Hover/dim states are derived with `color-mix`. |
 | `data-headless` | `true` `false` | `false` | `true` hides the floating button so you can drive the flow from your own UI. |
 | `data-blur-selectors` | selector list | *(empty)* | Elements matched are blurred before capture. |
@@ -379,8 +399,13 @@ and it does not need any route of its own.
   strokes stop), **Type** (outlines the target, hands the text over in a copy/paste tooltip, and
   inserts it through the native value setter so React/Vue register the change), plus **Chat**,
   **Report** and **End**.
-- Requires `https://` for the agent's own camera/mic in `audio`/`video` modes. `chat` needs no
-  media permission on either side beyond the customer's one-time snapshot.
+- The agent's stage is never blank and never lies about what it is showing. The badge reports the
+  mode and the share state (`Connected · video call · screen live · 1260×820`), and if the session is
+  up but no picture has arrived the stage says *"Connected — waiting for their screen…"* rather than
+  rendering an empty frame. Keep that honesty if you fork it: an agent must be able to tell "they have
+  not shared yet" apart from "the feed is live and nothing is happening".
+- Requires `https://` for the agent's own camera/mic in `video` mode. `chat` needs no media
+  permission on either side beyond the customer's screen share at request time.
 - Coordinates are **normalized `0.0`–`1.0`** of the customer's viewport. Pixels never cross the wire.
   If you fork the agent view, keep that invariant and account for `object-fit: contain` letterboxing.
 
@@ -403,19 +428,29 @@ Do these in order; each one catches a distinct class of mistake.
 3. **Preflight** — open the Network tab: the `POST` must not be preceded by a failed `OPTIONS`. If it
    is, add the CORS headers (§5).
 4. **Decline path** — submit and refuse the screen-share prompt. The request must still be delivered
-   with `snapshot: null`. It must not throw or hang.
+   with `snapshot: null`. It must not throw or hang, the session must still connect, and the panel
+   must say the agent cannot see the screen and offer **Share my screen again**.
 5. **Teardown** — call `SupportLayer.removePrivacyBlur()` and confirm the page's markup is unchanged
    (`document.body.innerHTML` before vs after; the widget's own tree should be the only difference).
 6. **Round trip** — open the payload's `live_session_url` in a second browser. It must load *your*
    page with the agent dock over it, not a SupportLayer page. In `chat` mode, move the agent's pointer
    and confirm the laser lands on the element you hovered; then confirm **Type** hands text to the
    right field. Coordinate misalignment is the most common fork regression.
-7. **Mode is fixed** — confirm the customer's panel offers no way to switch between chat, audio and
-   video. Changing the channel must require editing `data-mode` and reloading.
-8. **Mobile** — repeat step 2 on a phone-sized viewport. The panel clamps itself to
+   - **Did the agent actually see something?** The badge must read `screen live` and the stage must
+     show the customer's page, not an empty frame. If it says `no screen yet` while the customer's
+     panel says the agent can see their screen, the media call never connected — check that nothing
+     between you and the signalling broker (a proxy, a CSP entry) is dropping it. `npm run live:check`
+     in this repo is a working reference: it opens a real session and asserts a decoded frame lands on
+     the agent stage.
+7. **Mode is fixed** — confirm the customer's panel offers no way to switch between chat and video.
+   Changing the channel must require editing `data-mode` and reloading.
+8. **The share cannot be stopped** — in a live session, confirm the only buttons in the panel are the
+   call controls and `End`. There must be no "Stop sharing" and no share toggle; ending the session is
+   what stops it. Then end the session and confirm the capture indicator disappears.
+9. **Mobile** — repeat step 2 on a phone-sized viewport. The panel clamps itself to
    `min(384px, 100vw - 32px)` wide and `min(620px, 100vh - 120px)` tall, so it should never overflow;
    confirm the button stays reachable above your own fixed footers or cookie bars.
-9. **Console hygiene** — the page must log no `console.error` after a full session. Two `warn`
+10. **Console hygiene** — the page must log no `console.error` after a full session. Two `warn`
    messages are legitimate: the `data-fields` warning (only if your JSON is invalid) and a webhook
    delivery failure (only if the POST actually failed).
 
@@ -478,12 +513,18 @@ Do not build these on top of the current version without agreeing to change the 
 ## 13. Versioning
 
 The current version is reported by `window.SupportLayer.version` and in the file header of
-`supportlayer.js` (currently **2.0.0** — the release that collapsed the two-page design into one
-script with two roles). Pin the CDN URL to a tag or commit SHA for production
-(`https://cdn.jsdelivr.net/gh/Spuds0588/SupportLayer@v2.0.0/supportlayer.js` once tagged, or an
+`supportlayer.js` (**2.1.0** — three modes, a session-scoped screen share, and the live-path fix
+below; 2.0.0 was the release that collapsed the two-page design into one script with two roles).
+Pin the CDN URL to a tag or commit SHA for production
+(`https://cdn.jsdelivr.net/gh/Spuds0588/SupportLayer@v2.1.0/supportlayer.js` once tagged, or an
 immutable SHA as shown in §5) and read the [`history.md`](history.md) entry for a version before
 upgrading — it records the behaviour changes and bug fixes so you can tell whether an upgrade
 affects you.
+
+The 2.1.0 upgrade is **breaking in two ways, both deliberate**: `data-mode="audio"` now boots a
+video call (same two-way audio, plus camera), and the customer can no longer stop screen sharing
+mid-session. If either is a problem for your surface, use `data-mode="chat"` — text plus the agent's
+view of the screen, with no call at all.
 
 If you fork the widget, keep `agents.md` next to it; it documents the invariants that are easy to
 break and expensive to debug.

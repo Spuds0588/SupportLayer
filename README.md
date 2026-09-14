@@ -53,24 +53,24 @@ preflight your endpoint must answer, CSP and HTTPS requirements, and a post-inte
 ### Modes
 
 The developer picks the channel once, at install time; the user never switches it mid-session. What the customer sees
-inside the request panel is the same component in all four modes — it just becomes a chat thread, or a call.
+inside the request panel is the same component in all three modes — it just becomes a chat thread, or a call.
 
 | `data-mode` | What happens |
 | --- | --- |
 | `none` | Async bug report only. One-frame JPEG snapshot + diagnostics → webhook. No live channel. |
-| `chat` | Everything above, plus a PeerJS data channel so an agent can laser-click, draw, and hand over text. |
-| `audio` | Chat, plus **two-way** audio — the agent's microphone to the user *and* the user's microphone back. |
-| `video` | Chat, plus **two-way** audio and video in both directions. |
+| `chat` | Everything above, plus a live session: the agent sees the screen and can laser-click, draw, and hand over text. |
+| `video` | The same, plus a **two-way** audio + video call in both directions. |
 
-Screen sharing is always a separate, explicit action (`Share my screen`), so the snapshot at request time is the only
-thing captured by default.
+Either live mode carries the customer's screen with it. The share starts when they send the request and runs until the
+session ends — the panel offers no way to stop it in between, because an agent who cannot see the screen cannot guide.
+`audio` was a third live mode in 2.0 and is now an alias for `video` (it still boots a call).
 
 ### Configuration attributes
 
 | Attribute | Values | Purpose |
 | --- | --- | --- |
 | `data-webhook` | URL | Where `support_request` / `support_update` payloads are POSTed. |
-| `data-mode` | `none` `chat` `audio` `video` | Async report or live P2P session. |
+| `data-mode` | `none` `chat` `video` | Async report, or a live P2P session that includes the customer's screen. |
 | `data-theme` | hex | Brand colour for every widget surface (`color-mix` derives hover/dim states). |
 | `data-headless` | `true` `false` | Suppress the floating button and drive the flow yourself. |
 | `data-blur-selectors` | CSS selector list | Elements blurred before capture. |
@@ -164,9 +164,11 @@ reported window geometry. Pixels never cross the wire.
 
 ```bash
 npm start            # zero-dependency static server on http://127.0.0.1:4174
-npm test             # headless Chromium end-to-end suite
+npm test             # headless Chromium end-to-end suite (183 checks)
 npm run test:headed  # same suite with a visible window (real rendering + input)
-npm run test:live    # the same 171 checks against the deployed GitHub Pages site
+npm run test:live    # the same checks against the deployed GitHub Pages site
+npm run live:check   # the REAL path: real capture + real PeerJS signalling between two peers
+npm run live:session # open a real session and print the agent URL for a second browser to join
 ```
 
 The suite boots the server itself, plays the homepage storyboard step by step (asserting which perspective is live
@@ -177,8 +179,14 @@ It also asserts layout invariants — the FAB inside the customer viewport, the 
 toast and coach line clearing the dock — so a CSS regression fails the build instead of surviving as a bad screenshot.
 
 `test:live` passes `--base <url>` (equivalently `SL_BASE`) so the identical suite runs against a deployed origin —
-the same 171 checks pass against `https://spuds0588.github.io/SupportLayer/`, which is how the published page is
+the same 183 checks pass against `https://spuds0588.github.io/SupportLayer/`, which is how the published page is
 verified rather than assumed.
+
+That suite runs everything over a same-origin `BroadcastChannel` bus with synthetic capture, which means it never
+touches PeerJS signalling, the `getDisplayMedia` permission flow, or a real media track. `npm run live:check` does:
+it opens a genuine customer session in a real browser, dials it from a second peer, and fails unless a real screen
+track arrives *and* decodes a frame. `npm run live:session` leaves the customer window open and prints the agent URL
+so a human can join the same session from another browser.
 
 ## Repository layout
 
@@ -190,7 +198,8 @@ verified rather than assumed.
 | `room.html` | Dev fixture: the same page twice, customer and agent, for manual and automated two-role runs. |
 | `test.html` | Integration harness with in-page assertions. |
 | `serve.js` | Zero-dependency static dev server. |
-| `tests/e2e.mjs` | Puppeteer end-to-end suite (headless + headed). |
+| `tests/e2e.mjs` | Puppeteer end-to-end suite over the loopback bus (headless + headed). |
+| `tests/live-session.mjs` | The real path: real capture + real WebRTC, plus a handoff URL for a human agent. |
 | `INTEGRATION.md` | Step-by-step guide for wiring the library into *your* app (humans + coding agents). |
 | `agents.md` | Architecture rules for anyone (or any model) editing *this* repo. |
 | `todo.md`, `history.md` | Live task list and changelog. |
