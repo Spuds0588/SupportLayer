@@ -58,7 +58,7 @@
      Opacity lives on the slot (a constant per hand) so the pop/fade keyframes can
      animate plain 0→1→1→0 values inside the nested element — no custom properties
      inside keyframes, which keeps this working everywhere. */
-  .hand-slot { position: absolute; opacity: var(--peak, .15); will-change: transform, opacity; }
+  .hand-slot { position: absolute; opacity: var(--peak, .28); will-change: transform, opacity; pointer-events: none; }
   .hand-pop { width: 100%; height: 100%; animation: hand-rise var(--dur, 3.4s) ease-out forwards; }
   .hand-slot svg { display: block; width: 100%; height: 100%; overflow: visible; animation: hand-wave var(--dur, 3.4s) ease-in-out forwards; transform-origin: 50% 88%; }
   .hand-slot svg rect { fill: var(--primary); }
@@ -79,6 +79,8 @@
     82% { transform: rotate(-3deg); }
   }
   @media (prefers-reduced-motion: reduce) { .hand-slot { display: none; } }
+  /* Local preview escape hatch only; normal reduced-motion users remain protected. */
+  .motion-preview .hand-slot { display: block; }
 
   /* ---------- layout ---------- */
   .section { padding: 7rem 2rem; }
@@ -565,7 +567,6 @@ https://app.domain.com/checkout
       <a href="https://github.com/Spuds0588/SupportLayer" class="mx-3" target="_blank" rel="noopener">GitHub</a>
       <a href="#demo" class="mx-3">Simulated demo</a>
       <a href="demo.html" class="mx-3">Interactive demo</a>
-      <a href="test.html" class="mx-3">Test harness</a>
       <a href="https://github.com/Spuds0588/SupportLayer/blob/main/INTEGRATION.md" class="mx-3" target="_blank" rel="noopener">Integration guide</a>
     </div>
 
@@ -606,11 +607,13 @@ https://app.domain.com/checkout
   (function wavingHands() {
     var container = document.getElementById("floating-container");
     if (!container) return;
-    if (window.matchMedia && window.matchMedia("(prefers-reduced-motion: reduce)").matches) return;
+    var previewMotion = new URLSearchParams(location.search).get("preview-motion") === "1";
+    if (previewMotion) document.documentElement.classList.add("motion-preview");
+    if (window.matchMedia && window.matchMedia("(prefers-reduced-motion: reduce)").matches && !previewMotion) return;
 
     var NS = "http://www.w3.org/2000/svg";
     var wide = window.innerWidth > 760;
-    var maxAlive = wide ? 7 : 4;
+    var maxAlive = wide ? 8 : 5;
     var alive = 0;
     window.__handsSpawned = 0;
 
@@ -640,7 +643,7 @@ https://app.domain.com/checkout
     }
 
     function spawn() {
-      var size = wide ? 24 + Math.random() * 28 : 20 + Math.random() * 20;
+      var size = wide ? 52 + Math.random() * 36 : 44 + Math.random() * 26;
       var dur = 2.7 + Math.random() * 1.5;
       var depth = Math.random();
 
@@ -648,12 +651,20 @@ https://app.domain.com/checkout
       slot.className = "hand-slot";
       slot.style.width = size + "px";
       slot.style.height = size * 1.24 + "px";
-      slot.style.left = Math.random() * 94 + "%";
+      var left = 4 + Math.random() * 90;
+      var occupied = Array.prototype.map.call(container.querySelectorAll(".hand-slot"), function (node) {
+        return parseFloat(node.dataset.handLeft || "-100");
+      });
+      for (var attempt = 0; attempt < 8 && occupied.some(function (value) { return Math.abs(value - left) < 14; }); attempt++) {
+        left = 4 + Math.random() * 90;
+      }
+      slot.dataset.handLeft = left.toFixed(2);
+      slot.style.left = left + "%";
       slot.style.bottom = Math.random() * 74 - 6 + "%";
       slot.style.zIndex = String(Math.round(depth * 4));
       slot.style.setProperty("--dur", dur.toFixed(2) + "s");
-      slot.style.setProperty("--peak", (0.11 + depth * 0.11).toFixed(3));
-      if (depth < 0.4) slot.style.filter = "blur(" + (1.5 - depth * 3.2).toFixed(1) + "px)";
+      slot.style.setProperty("--peak", (0.28 + depth * 0.18).toFixed(3));
+      if (depth < 0.4) slot.style.filter = "blur(" + Math.max(0, 1.2 - depth * 2.4).toFixed(1) + "px)";
 
       var pop = document.createElement("div");
       pop.className = "hand-pop";
@@ -671,7 +682,7 @@ https://app.domain.com/checkout
 
     function tick() {
       if (!document.hidden && alive < maxAlive) spawn();
-      window.setTimeout(tick, 480 + Math.random() * 920);
+      window.setTimeout(tick, 300 + Math.random() * 420);
     }
     window.setTimeout(tick, 250);
   })();
