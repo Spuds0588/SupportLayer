@@ -58,9 +58,16 @@
      Opacity lives on the slot (a constant per hand) so the pop/fade keyframes can
      animate plain 0→1→1→0 values inside the nested element — no custom properties
      inside keyframes, which keeps this working everywhere. */
-  .hand-slot { position: absolute; opacity: var(--peak, .28); will-change: transform, opacity; pointer-events: none; }
-  .hand-pop { width: 100%; height: 100%; animation: hand-rise var(--dur, 3.4s) ease-out forwards; }
-  .hand-slot svg { display: block; width: 100%; height: 100%; overflow: visible; animation: hand-wave var(--dur, 3.4s) ease-in-out forwards; transform-origin: 50% 88%; }
+  .hand-slot { position: absolute; opacity: var(--peak, .28); pointer-events: none; }
+  .hand-pop { width: 100%; height: 100%; }
+  .hand-slot svg { display: block; width: 100%; height: 100%; overflow: visible; animation: hand-wave-surprise var(--wave-dur, 11s) ease-in-out var(--wave-delay, 0s) infinite; transform-origin: 50% 88%; }
+  @keyframes hand-wave-surprise {
+    0%, 72% { transform: rotate(0deg); }
+    78% { transform: rotate(-9deg); }
+    84% { transform: rotate(9deg); }
+    90% { transform: rotate(-7deg); }
+    96%, 100% { transform: rotate(0deg); }
+  }
   .hand-slot svg rect { fill: var(--primary); }
   .hand-slot svg path { fill: none; stroke: var(--primary); stroke-width: 1.1; stroke-linecap: round; opacity: .8; }
   @keyframes hand-rise {
@@ -616,6 +623,18 @@ https://app.domain.com/checkout
     var maxAlive = wide ? 8 : 5;
     var alive = 0;
     window.__handsSpawned = 0;
+    var columns = wide ? 4 : 3;
+    var rows = 2;
+    var positions = [];
+    for (var row = 0; row < rows; row++) {
+      for (var col = 0; col < columns; col++) {
+        positions.push({
+          left: 7 + col * (86 / Math.max(1, columns - 1)),
+          top: 12 + row * 56
+        });
+      }
+    }
+    positions.sort(function () { return Math.random() - 0.5; });
 
     /* Palm + four fingers + a thumb, from primitives so it stays legible when it's
        small or blurred, plus one arc that reads as "waving". */
@@ -651,19 +670,17 @@ https://app.domain.com/checkout
       slot.className = "hand-slot";
       slot.style.width = size + "px";
       slot.style.height = size * 1.24 + "px";
-      var left = 4 + Math.random() * 90;
-      var occupied = Array.prototype.map.call(container.querySelectorAll(".hand-slot"), function (node) {
-        return parseFloat(node.dataset.handLeft || "-100");
-      });
-      for (var attempt = 0; attempt < 8 && occupied.some(function (value) { return Math.abs(value - left) < 14; }); attempt++) {
-        left = 4 + Math.random() * 90;
-      }
+      var position = positions.shift() || { left: 7 + Math.random() * 86, top: 12 + Math.random() * 76 };
+      var left = position.left + (Math.random() * 5 - 2.5);
+      var top = position.top + (Math.random() * 7 - 3.5);
       slot.dataset.handLeft = left.toFixed(2);
       slot.style.left = left + "%";
-      slot.style.bottom = Math.random() * 74 - 6 + "%";
+      // Use a shuffled grid so the hands fill the viewport without stacking on each other.
+      slot.style.top = top + "%";
       slot.style.zIndex = String(Math.round(depth * 4));
-      slot.style.setProperty("--dur", dur.toFixed(2) + "s");
-      slot.style.setProperty("--peak", (0.28 + depth * 0.18).toFixed(3));
+      slot.style.setProperty("--wave-dur", (8 + Math.random() * 8).toFixed(2) + "s");
+      slot.style.setProperty("--wave-delay", (-Math.random() * 12).toFixed(2) + "s");
+      slot.style.setProperty("--peak", (0.22 + depth * 0.14).toFixed(3));
       if (depth < 0.4) slot.style.filter = "blur(" + Math.max(0, 1.2 - depth * 2.4).toFixed(1) + "px)";
 
       var pop = document.createElement("div");
@@ -674,17 +691,11 @@ https://app.domain.com/checkout
 
       window.__handsSpawned++;
       alive++;
-      window.setTimeout(function () {
-        if (slot.parentNode) slot.parentNode.removeChild(slot);
-        alive--;
-      }, dur * 1000 + 150);
+
     }
 
-    function tick() {
-      if (!document.hidden && alive < maxAlive) spawn();
-      window.setTimeout(tick, 300 + Math.random() * 420);
-    }
-    window.setTimeout(tick, 250);
+    // Place a stable set immediately; each hand waves on its own long, delayed cycle.
+    for (var i = 0; i < maxAlive; i++) spawn();
   })();
 
   /* ============================ copy buttons ============================ */
