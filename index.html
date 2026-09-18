@@ -171,8 +171,14 @@
   .mock-sum { border-bottom: 0; border-top: 1px solid #e6e8ee; margin-top: 6px; padding-top: 9px; font-weight: 800; color: #12151c; }
   .mock-pay { margin-top: 12px; text-align: center; padding: 10px; border-radius: 9px; background: #14b8a6; color: #05100e; font-weight: 800; }
   .mock-foot { margin-top: 11px; font-size: 11px; color: #949bab; }
-  /* Kept clear of the widget panel's column so the failure message stays readable. */
-  .mock-error { position: relative; margin-top: 10px; max-width: 252px; padding: 9px 10px; border-radius: 9px; background: #fef2f2; border: 1px solid #fecaca; color: #b91c1c; font-size: 11.5px; }
+  .mock-sensitive { display: flex; justify-content: space-between; gap: 10px; margin-top: 7px; padding: 7px 9px; border-radius: 8px; background: #fff; border: 1px solid #e6e8ee; color: #6b7385; font-size: 10.5px; }
+  .mock-sensitive b { color: #12151c; font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-weight: 600; }
+  .mock-sensitive.blurred, .mock-line .js-sensitive.blurred { filter: blur(5px); }
+  /* The agent receives the same page frame, not a proxy illustration or a cropped replacement. */
+  .session-screen { padding: 0; overflow: hidden; }
+  .session-screen .mock-panel { z-index: 1; }
+  .session-customer-panel { bottom: 12px; }
+  .session-spot { z-index: 3; }
 
   .mock-fab { position: absolute; right: 12px; bottom: 12px; padding: 8px 13px; border-radius: 999px; background: #12151c; color: #fff; font-weight: 700; font-size: 11.5px; box-shadow: 0 6px 18px rgba(0,0,0,.25); }
   .mock-fab.pulse { animation: story-pulse 1.1s ease-in-out infinite; }
@@ -222,7 +228,7 @@
   .notice-cta { margin-top: 12px; display: inline-block; padding: 7px 12px; border-radius: 999px; background: var(--primary-dim); border: 1px solid var(--primary-border); color: #9fe9dc; font-size: 11.5px; font-weight: 800; }
 
   .session { position: absolute; inset: 0; }
-  .session-screen { position: absolute; inset: 0 0 64px; background: #f7f8fb; padding: 22px; display: grid; gap: 12px; align-content: start; }
+  .session-screen { position: absolute; inset: 0; background: #f7f8fb; padding: 0; overflow: hidden; }
   .skel { height: 12px; border-radius: 6px; background: #e6e8ee; }
   .w70 { width: 70%; } .w90 { width: 90%; } .w50 { width: 50%; }
   .skel-err { height: auto; padding: 10px 12px; background: #fef2f2; border: 1px solid #fecaca; color: #b91c1c; border-radius: 9px; }
@@ -307,7 +313,7 @@
 <div class="nav-links">
   <a href="#demo">Demo</a>
   <a href="#docs">Getting started</a>
-  <a href="room.html">Try it live</a>
+  <a href="demo.html">Try the interactive demo</a>
   <a href="https://github.com/Spuds0588/SupportLayer" target="_blank" rel="noopener"><i class="fab fa-github"></i> GitHub</a>
 </div>
 
@@ -410,9 +416,12 @@
                   <div class="mock-line"><span>Sourdough starter kit</span><b>$32.00</b></div>
                   <div class="mock-line"><span>Rye flour, stone ground</span><b>$9.60</b></div>
                   <div class="mock-line"><span>Shipping</span><b>Free</b></div>
-                  <div class="mock-line mock-sum"><span>Total due</span><b class="order-total">$52.06</b></div>
+                  <div class="mock-line mock-sum"><span>Total due</span><b class="order-total js-sensitive">$52.06</b></div>
                   <div class="mock-pay">Complete purchase</div>
                   <div class="mock-error js-error">Payment gateway timeout (504). Your card was not charged.<span class="mock-ring js-ring"></span></div>
+                  <div class="mock-sensitive js-sensitive"><span>Card on file</span><b>4242 4242 4242 4242</b></div>
+                  <div class="mock-sensitive js-sensitive"><span>Receipt email</span><b>jane.doe@example.com</b></div>
+                  <div class="mock-sensitive js-sensitive"><span>Tax ID on file</span><b>123-45-6789</b></div>
                   <div class="mock-foot">Billing address · 14 Rowan St, Portland OR</div>
                 </div>
 
@@ -458,10 +467,8 @@
 
                 <div class="session js-session">
                   <div class="session-screen">
-                    <div class="skel w70"></div>
-                    <div class="skel w90"></div>
-                    <div class="skel skel-err">Payment gateway timeout (504)</div>
-                    <div class="skel w50"></div>
+                    <!-- Filled by the storyboard from the customer screen so both perspectives cannot drift. -->
+                    <div class="mock-app agent-screen"></div>
                     <span class="session-spot js-session-spot"></span>
                   </div>
                   <div class="session-dock">
@@ -557,7 +564,7 @@ https://app.domain.com/checkout
     <div class="links mb-5">
       <a href="https://github.com/Spuds0588/SupportLayer" class="mx-3" target="_blank" rel="noopener">GitHub</a>
       <a href="#demo" class="mx-3">Simulated demo</a>
-      <a href="room.html" class="mx-3">Two-role room</a>
+      <a href="demo.html" class="mx-3">Interactive demo</a>
       <a href="test.html" class="mx-3">Test harness</a>
       <a href="https://github.com/Spuds0588/SupportLayer/blob/main/INTEGRATION.md" class="mx-3" target="_blank" rel="noopener">Integration guide</a>
     </div>
@@ -722,7 +729,7 @@ https://app.domain.com/checkout
       var el = story.querySelector(sel);
       return el ? [el] : [];
     };
-    var clear = function (list) { list.forEach(function (el) { el.classList.remove("on", "off", "pulse"); }); };
+    var clear = function (list) { list.forEach(function (el) { el.classList.remove("on", "off", "pulse", "blurred"); }); };
 
     /* Every element the story touches, grouped so a step can just be a predicate. */
     var el = {
@@ -731,6 +738,7 @@ https://app.domain.com/checkout
       panel: pick(".js-panel"),
       form: pick(".js-form"),
       redact: pick(".js-redact"),
+      sensitive: pick(".js-sensitive"),
       chat: pick(".js-chat"),
       notice: pick(".js-notice"),
       session: pick(".js-session"),
@@ -744,6 +752,27 @@ https://app.domain.com/checkout
     };
     var viewCustomer = story.querySelector(".js-view-customer");
     var viewAgent = story.querySelector(".js-view-agent");
+
+    /* The agent's stage is a captured view of the customer's page, not a second illustration.
+       Build it from the customer DOM once so labels, totals, error state, and sensitive fields
+       can never diverge as the storyboard evolves. The agent-only chrome remains outside it. */
+    var customerScreen = story.querySelector(".view-customer .mock-app");
+    var agentScreen = story.querySelector(".agent-screen");
+    if (customerScreen && agentScreen) {
+      var sharedScreen = customerScreen.cloneNode(true);
+      [".mock-fab", ".mock-panel", ".mock-incoming"].forEach(function (selector) {
+        sharedScreen.querySelectorAll(selector).forEach(function (node) { node.remove(); });
+      });
+      sharedScreen.querySelectorAll(".js-sensitive").forEach(function (node) {
+        node.classList.add("blurred");
+      });
+      sharedScreen.querySelectorAll(".js-error").forEach(function (node) {
+        node.classList.add("on");
+      });
+      sharedScreen.classList.add("agent-screen-ready");
+      agentScreen.replaceWith(sharedScreen);
+    }
+
     var urlEl = document.getElementById("story-url");
     var tagEl = document.getElementById("story-tag");
     var featureEl = story.querySelector(".js-feature");
@@ -779,6 +808,7 @@ https://app.domain.com/checkout
       if (n >= 1) on(el.fab);
       if (n === 1) el.fab.forEach(function (e) { e.classList.add("pulse"); });
       if (n >= 2) { on(el.panel); el.fab.forEach(function (e) { e.classList.add("off"); }); }
+      if (n >= 2) el.sensitive.forEach(function (e) { e.classList.add("blurred"); });
       if (n === 2 || n === 3) { on(el.form); on(el.redact); }
       // From the moment they send it, the customer's own panel says the agent can see the screen —
       // and it keeps saying it, because the share outlives every later beat.

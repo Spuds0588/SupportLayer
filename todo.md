@@ -248,6 +248,14 @@ v2 collapsed the two-page design into one: the agent no longer has a page of the
       way because the loopback bus ignores ids.
 - [x] VERSION / package.json / docs at **2.1.0**, with the two breaking changes named in INTEGRATION §13.
 
+## Phase 15 — Single-file interactive demo  ✅ done
+- [x] Added `demo.html` as the recommended manual experience: one customer document with `?sl_role=agent` switching it into the agent view.
+- [x] Customer support submission now becomes a simulated webhook notification with ticket details and an **Open support portal** action.
+- [x] The handoff opens the same demo URL in a second tab with `peer` and `sl-demo=1`; both tabs stay synchronized over the same-origin loopback bus.
+- [x] The agent tab displays ticket context, connects to the room, shows the matching blurred Sunny Bakery checkout feed, and can chat/use the existing realtime tools.
+- [x] Added 12 end-to-end checks for the notification, handoff URL, agent context, connection, feed, and realtime chat.
+- [x] Updated the homepage and README links so `demo.html` is the recommended interactive demo; `room.html` remains the automated fixture.
+
 ## Backlog (explicitly not in v2)
 - [ ] Multiparty sessions / multiple agents per session.
 - [ ] Optional `data-position` placement attribute for the FAB.

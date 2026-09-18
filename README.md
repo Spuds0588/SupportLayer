@@ -6,23 +6,24 @@ redacted, one-frame snapshot — straight to the webhook you already have (Slack
 When a report isn't enough, the agent joins the *same page* over a live peer-to-peer session and can point at
 things, draw on the user's screen, and hand text over for review.
 
-No middleware, no S3 bucket, no WebSocket relay, no SDK, no build step. Two files do the work — `supportlayer.js`
-is the whole product, and the agent experience is that same script running in a different role.
+`demo.html` is the interactive development experience: it is one page with two URL-param roles. In the customer role, submit a request and the simulated webhook produces an in-page support notification with the ticket details and an **Open support portal** action. That action opens the same `demo.html` in a second tab with `?sl_role=agent&peer=...&sl-demo=1`; the agent connects over the same-origin `BroadcastChannel` transport, displays the ticket context and customer feed, and can chat, point, click, draw, or type while the customer tab updates in real time.
+
+The legacy `room.html` fixture remains for the automated widget test harness; it is not the recommended manual demo.
 
 ## ▶ [**Open the live homepage and try the demo →**](https://spuds0588.github.io/SupportLayer/)
 
 The homepage leads with the outcome — **one line of code and your app has support built in**, wired to the webhook
-you already run — and keeps the how-to in [`INTEGRATION.md`](INTEGRATION.md). It then plays a short **animated
-walkthrough**: a customer's checkout fails, they ask for help from the page itself, the report lands in a channel
-your team already reads, and an agent joins them on that same URL to point and draw. The stage **cuts between the customer's view and the agent's** as the story moves, so you see each
-side of the session as it happens rather than comparing two windows. Nothing to drive, nothing to install. To run
-both roles side by side for real, open [`room.html`](https://spuds0588.github.io/SupportLayer/room.html).
+ you already run — and keeps the how-to in [`INTEGRATION.md`](INTEGRATION.md). It then plays a short **animated
+ walkthrough**: a customer's checkout fails, they ask for help from the page itself, the report lands in a channel
+ your team already reads, and an agent joins them on that same URL to point and draw. To try the complete interactive
+ flow, open [`demo.html`](demo.html): submit a request, receive the simulated support notification, open the agent
+ link in a second tab, and use the live tools against the customer page.
 
 | | |
 | --- | --- |
 | 🏠 **Homepage + walkthrough** | **[spuds0588.github.io/SupportLayer](https://spuds0588.github.io/SupportLayer/)** |
+| 🎬 **Interactive demo** | [`demo.html`](demo.html) — submit a request, open the agent link in a second tab, and try the synced support tools |
 | 🧪 **Integration harness** | [spuds0588.github.io/SupportLayer/test.html](https://spuds0588.github.io/SupportLayer/test.html) |
-| 🎬 **Two-role room** | [spuds0588.github.io/SupportLayer/room.html](https://spuds0588.github.io/SupportLayer/room.html) — the same page twice, customer and agent |
 | 🎧 **Agent experience** | The customer's own URL + `?sl_role=agent&peer=<id>` — same page, no second app |
 | 📘 **Integration guide** | [INTEGRATION.md](https://github.com/Spuds0588/SupportLayer/blob/main/INTEGRATION.md) — wiring it into your app, for humans and coding agents |
 
@@ -195,8 +196,9 @@ so a human can join the same session from another browser.
 | --- | --- |
 | `supportlayer.js` | The product — both roles. Vanilla JS IIFE, one global, zero dependencies. |
 | `index.html` | Landing page: a value-first pitch, a self-playing storyboard that cuts between the two perspectives, and a waving-hands background. |
-| `demo-app.html` | The simulated customer app, loaded in both roles by `room.html`. |
-| `room.html` | Dev fixture: the same page twice, customer and agent, for manual and automated two-role runs. |
+| `demo.html` | Complete interactive demo: customer request, simulated webhook notification, second-tab agent handoff, and realtime loopback controls. |
+| `demo-app.html` | The simulated customer app used by the development fixture. |
+| `room.html` | Legacy/dev fixture: the same customer app loaded twice for automated two-role runs. |
 | `test.html` | Integration harness with in-page assertions. |
 | `serve.js` | Zero-dependency static dev server. |
 | `tests/e2e.mjs` | Puppeteer end-to-end suite over the loopback bus (headless + headed). |

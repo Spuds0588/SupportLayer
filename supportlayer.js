@@ -1062,13 +1062,13 @@
     ".sl-unread { display: inline-flex; align-items: center; justify-content: center; min-width: 17px; height: 17px; padding: 0 5px; border-radius: 999px; background: #ff5f57; color: #fff; font-size: 10px; font-weight: 800; }",
 
     /* ---------- agent view: chat + what-is-happening card ---------- */
-    ".sl-card { position: absolute; right: 16px; bottom: 96px; z-index: 8; width: min(348px, calc(100% - 32px)); max-height: min(440px, 62vh); display: flex; flex-direction: column; border-radius: 16px; background: rgba(13,16,22,.97); border: 1px solid rgba(255,255,255,.13); box-shadow: 0 24px 54px rgba(0,0,0,.6); overflow: hidden; }",
+    ".sl-card { position: absolute; right: 16px; bottom: calc(var(--sl-dock-h, 104px) + 12px); z-index: 8; width: min(340px, calc(100% - 32px)); max-height: min(390px, 48vh); display: flex; flex-direction: column; border-radius: 14px; background: rgba(13,16,22,.98); border: 1px solid rgba(255,255,255,.13); box-shadow: 0 18px 42px rgba(0,0,0,.5); overflow: hidden; }",
     ".sl-card[hidden] { display: none !important; }",
-    ".sl-info-card { left: 16px; right: auto; }",
-    ".sl-card-head { display: flex; align-items: center; gap: 8px; padding: 11px 13px; border-bottom: 1px solid rgba(255,255,255,.08); font-size: 12px; font-weight: 700; text-transform: uppercase; letter-spacing: .06em; color: #98a1b3; }",
+    ".sl-info-card { left: 16px; right: auto; bottom: calc(var(--sl-dock-h, 104px) + 12px); }",
+    ".sl-card-head { display: flex; align-items: center; gap: 8px; padding: 10px 12px; border-bottom: 1px solid rgba(255,255,255,.08); font-size: 12px; font-weight: 700; text-transform: uppercase; letter-spacing: .06em; color: #98a1b3; }",
     ".sl-card-head span { flex: 1; }",
     ".sl-card-body { padding: 11px 13px; overflow: auto; }",
-    ".sl-card-body .sl-transcript { margin-bottom: 0; max-height: 260px; }",
+    ".sl-card-body .sl-transcript { margin-bottom: 0; max-height: 220px; }",
     ".sl-agent-composer { display: flex; gap: 7px; padding: 10px 11px; border-top: 1px solid rgba(255,255,255,.08); }",
     ".sl-agent-composer input { flex: 1; padding: 9px 11px; border-radius: 10px; border: 1px solid rgba(255,255,255,.12); background: #171b24; color: #fff; font: inherit; font-size: 12.5px; outline: none; min-width: 0; }",
     ".sl-agent-composer button { padding: 9px 13px; border-radius: 10px; border: 0; background: var(--sl-theme); color: var(--sl-on-theme); font-weight: 700; font-size: 12.5px; }",
@@ -1084,9 +1084,9 @@
        to three rows on narrow panes, so a fixed offset would sit inside it. */
     ".sl-agent-toast { position: absolute; left: 50%; bottom: calc(var(--sl-dock-h, 104px) + 12px); transform: translateX(-50%) translateY(12px); z-index: 10; padding: 9px 15px; border-radius: 999px; background: rgba(13,16,22,.96); border: 1px solid var(--sl-theme-border); color: #eef1f6; font-size: 12.5px; opacity: 0; pointer-events: none; transition: opacity .2s ease, transform .2s ease; }",
     ".sl-agent-toast.sl-show { opacity: 1; transform: translateX(-50%) translateY(0); }",
-    ".sl-agent-hint { position: absolute; left: 16px; bottom: calc(var(--sl-dock-h, 104px) + 12px); z-index: 6; max-width: 300px; font-size: 11.5px; line-height: 1.55; color: #7e8798; text-shadow: 0 1px 2px rgba(0,0,0,.6); transition: opacity .45s ease; }",
+    ".sl-agent-hint { position: absolute; left: 16px; bottom: calc(var(--sl-dock-h, 104px) + 12px); z-index: 6; max-width: 250px; font-size: 11px; line-height: 1.45; color: #7e8798; text-shadow: 0 1px 2px rgba(0,0,0,.6); transition: opacity .45s ease; }",
     ".sl-agent-hint b { color: #cfd6e2; }",
-    ".sl-agent-hint.sl-fade { opacity: 0; }"
+    ".sl-agent-hint.sl-fade { opacity: 0; }",
   ].join("\n");
 
   function buildStyle() {
@@ -1356,19 +1356,13 @@
     });
     actions.appendChild(ui.clearBtn);
 
-    ui.chatBtn = h("button", { class: "sl-dock-btn", type: "button", "data-act": "chat", "aria-expanded": "false" }, ICONS.chat + "<span>Chat</span>");
+    ui.chatBtn = h("button", { class: "sl-dock-btn sl-armed", type: "button", "data-act": "chat", "aria-expanded": "true", title: "Communication is always open" }, ICONS.chat + "<span>Chat</span>");
     ui.chatBadge = h("b", { class: "sl-unread", hidden: "true" }, "0");
     ui.chatBtn.appendChild(ui.chatBadge);
     ui.chatBtn.addEventListener("click", function () {
-      toggleAgentCard("chat");
+      toggleAgentCard("chat", true);
     });
     actions.appendChild(ui.chatBtn);
-
-    ui.infoBtn = h("button", { class: "sl-dock-btn", type: "button", "data-act": "info", "aria-expanded": "false" }, ICONS.info + "<span>Report</span>");
-    ui.infoBtn.addEventListener("click", function () {
-      toggleAgentCard("info");
-    });
-    actions.appendChild(ui.infoBtn);
 
     ui.endBtn = h("button", { class: "sl-dock-btn sl-danger", type: "button", "data-act": "end", title: "End the session for the customer" }, ICONS.end + "<span>End</span>");
     ui.endBtn.addEventListener("click", function () {
@@ -1387,13 +1381,10 @@
     });
 
     // ---- chat card
-    ui.chatCard = h("div", { class: "sl-card", hidden: "true", role: "log", "aria-label": "Support chat" });
+    ui.chatCard = h("div", { class: "sl-card", role: "log", "aria-label": "Support chat" });
     ui.chatCard.innerHTML =
-      '<div class="sl-card-head"><span>Support chat</span><button class="sl-x" type="button" aria-label="Close chat">✕</button></div>' +
+      '<div class="sl-card-head"><span>Communication · live</span></div>' +
       '<div class="sl-card-body"><div class="sl-transcript"></div></div>';
-    ui.chatCard.querySelector(".sl-x").addEventListener("click", function () {
-      toggleAgentCard("chat", false);
-    });
     ui.agentTranscript = ui.chatCard.querySelector(".sl-transcript");
     var form = h("form", { class: "sl-agent-composer" });
     form.innerHTML = '<input type="text" placeholder="Message the customer…" aria-label="Message the customer"><button type="submit">Send</button>';
@@ -1405,15 +1396,9 @@
     ui.chatCard.appendChild(form);
     stage.appendChild(ui.chatCard);
 
-    // ---- report card
-    ui.infoCard = h("div", { class: "sl-card sl-info-card", hidden: "true" });
-    ui.infoCard.innerHTML =
-      '<div class="sl-card-head"><span>Their report</span><button class="sl-x" type="button" aria-label="Close report">✕</button></div>' +
-      '<div class="sl-card-body"><div class="sl-info-rows"></div><ul class="sl-answers"></ul><img class="sl-snap" alt="Customer viewport snapshot" hidden></div>';
-    ui.infoCard.querySelector(".sl-x").addEventListener("click", function () {
-      toggleAgentCard("info", false);
-    });
-    stage.appendChild(ui.infoCard);
+    // Request details arrive in the original support payload and handoff URL.
+    // Keep the agent surface focused on communication and the live tools.
+    ui.infoCard = null;
 
     ui.agent.appendChild(stage);
     root.appendChild(ui.agent);
@@ -1901,7 +1886,8 @@
     clearTimer: null,
     drawing: false,
     hasFeed: false,
-    remoteScreen: false
+    remoteScreen: false,
+    demoScreen: null
   };
 
   function clientMode() {
@@ -2262,6 +2248,102 @@
 
   /* ---------------------------- simulated feed ---------------------------- */
 
+  function drawSunnyBakeryDemoScreen(ctx, W, H, S, font, screen) {
+    var ink = "#12151c";
+    var muted = "#6b7385";
+    var line = "#e6e8ee";
+    var page = "#f7f8fb";
+    var card = "#ffffff";
+    var left = Math.max(18, (W - 1060 * S) / 2);
+    var contentW = W - left * 2;
+    var asideW = 290 * S;
+    var gap = 22 * S;
+    var mainW = Math.max(220 * S, contentW - asideW - gap);
+    var pad = 16 * S;
+    var text = function (value, x, y, size, color, weight) {
+      ctx.fillStyle = color || ink;
+      ctx.font = (weight || "400") + " " + Math.max(8, Math.round(size * S)) + "px " + font;
+      ctx.fillText(String(value), x, y);
+    };
+    var box = function (x, y, w, h, fill, stroke, radius) {
+      ctx.fillStyle = fill;
+      ctx.beginPath();
+      ctx.roundRect(x, y, w, h, radius || 8 * S);
+      ctx.fill();
+      if (stroke) { ctx.strokeStyle = stroke; ctx.stroke(); }
+    };
+    var blur = function (value, x, y, w) {
+      ctx.save();
+      ctx.filter = "blur(" + Math.max(2, 5 * S) + "px)";
+      text(value, x, y, 11, ink, "600");
+      ctx.restore();
+      ctx.strokeStyle = "rgba(107,115,133,.35)";
+      ctx.strokeRect(x - 2 * S, y - 13 * S, w, 17 * S);
+    };
+
+    ctx.fillStyle = page;
+    ctx.fillRect(0, 0, W, H);
+    ctx.fillStyle = card;
+    ctx.fillRect(0, 0, W, 54 * S);
+    ctx.strokeStyle = line;
+    ctx.beginPath(); ctx.moveTo(0, 54 * S); ctx.lineTo(W, 54 * S); ctx.stroke();
+    box(22 * S, 17 * S, 21 * S, 21 * S, "#f4a52a", null, 6 * S);
+    text("Sunny Bakery", 52 * S, 32 * S, 14, ink, "700");
+    text("Shop", W - 230 * S, 31 * S, 10, muted, "600");
+    text("Subscriptions", W - 174 * S, 31 * S, 10, muted, "600");
+    box(W - 86 * S, 14 * S, 64 * S, 26 * S, ink, null, 13 * S);
+    text("Cart · 3", W - 75 * S, 31 * S, 9, "#fff", "700");
+
+    var top = 78 * S;
+    text("Checkout", left, top, 19, ink, "800");
+    text("This is the customer’s real page.", left, top + 22 * S, 10, muted, "400");
+    var cardY = top + 38 * S;
+    var cardH = 218 * S;
+    box(left, cardY, mainW, cardH, card, line, 12 * S);
+    var products = [["Sourdough starter kit", "$32.00"], ["Rye flour, stone ground", "$9.60"], ["Bench scraper", "$6.60"]];
+    products.forEach(function (item, i) {
+      var y = cardY + (18 + i * 57) * S;
+      box(left + pad, y, 42 * S, 42 * S, "#ffe1a8", null, 8 * S);
+      text(item[0], left + 56 * S, y + 17 * S, 10.5, ink, "700");
+      text(i === 0 ? "Ships Tuesday · qty 1" : i === 1 ? "2 kg · qty 2" : "Stainless · qty 1", left + 56 * S, y + 33 * S, 9, muted, "400");
+      text(item[1], left + mainW - 62 * S, y + 23 * S, 10.5, ink, "700");
+      if (i < products.length - 1) { ctx.strokeStyle = line; ctx.setLineDash([2 * S, 3 * S]); ctx.beginPath(); ctx.moveTo(left + pad, y + 51 * S); ctx.lineTo(left + mainW - pad, y + 51 * S); ctx.stroke(); ctx.setLineDash([]); }
+    });
+
+    var payY = cardY + cardH + 14 * S;
+    var payH = 238 * S;
+    box(left, payY, mainW, payH, card, line, 12 * S);
+    text("Payment", left + pad, payY + 23 * S, 12, ink, "800");
+    text("Card on file", left + pad, payY + 49 * S, 9, muted, "700");
+    blur("4242 4242 4242 4242", left + 106 * S, payY + 49 * S, 128 * S);
+    text("Receipt email", left + pad, payY + 76 * S, 9, muted, "700");
+    blur("jane.doe@example.com", left + 106 * S, payY + 76 * S, 128 * S);
+    text("Tax ID on file", left + pad, payY + 103 * S, 9, muted, "700");
+    blur("123-45-6789", left + 106 * S, payY + 103 * S, 128 * S);
+    box(left + pad, payY + 122 * S, mainW - pad * 2, 30 * S, "#14b8a6", null, 7 * S);
+    text("Complete purchase", left + mainW / 2 - 45 * S, payY + 142 * S, 10, "#05100e", "800");
+    box(left + pad, payY + 161 * S, mainW - pad * 2, 51 * S, "#fef2f2", "#fecaca", 8 * S);
+    text("Payment gateway timeout (504).", left + pad + 8 * S, payY + 181 * S, 9.5, "#b91c1c", "700");
+    text("Your card was not charged.", left + pad + 8 * S, payY + 197 * S, 9, "#b91c1c", "400");
+
+    var asideX = left + mainW + gap;
+    box(asideX, cardY, asideW, 184 * S, card, line, 12 * S);
+    text("Order summary", asideX + pad, cardY + 23 * S, 12, ink, "800");
+    [["Subtotal", "$48.20"], ["Shipping", "Free"], ["Tax", "$3.86"]].forEach(function (item, i) {
+      text(item[0], asideX + pad, cardY + (53 + i * 25) * S, 10, muted, "400");
+      text(item[1], asideX + asideW - 58 * S, cardY + (53 + i * 25) * S, 10, ink, "600");
+    });
+    ctx.strokeStyle = line; ctx.beginPath(); ctx.moveTo(asideX + pad, cardY + 127 * S); ctx.lineTo(asideX + asideW - pad, cardY + 127 * S); ctx.stroke();
+    text("Total due", asideX + pad, cardY + 151 * S, 11, ink, "800");
+    blur("$52.06", asideX + asideW - 60 * S, cardY + 151 * S, 48 * S);
+    box(asideX, cardY + 198 * S, asideW, 118 * S, card, line, 12 * S);
+    text("Account", asideX + pad, cardY + 221 * S, 12, ink, "800");
+    text("Signed in as", asideX + pad, cardY + 246 * S, 9, muted, "400");
+    blur("jane.doe@example.com", asideX + pad, cardY + 264 * S, 140 * S);
+    text("Weekly subscription", asideX + pad, cardY + 294 * S, 9, muted, "400");
+    text("SIMULATED CUSTOMER SCREEN · sensitive data blurred", left, H - 14 * S, 9, "#0f766e", "800");
+  }
+
   function drawSimulatedFeed() {
     if (!ui.sim || !ui.sim.classList.contains("sl-on")) return;
     var ctx = ui.sim.getContext("2d");
@@ -2275,6 +2357,11 @@
     var H = h / dpr;
     var S = W / 1280;
     var font = getComputedStyle(document.body).fontFamily || "sans-serif";
+
+    if (ag.demoScreen && ag.demoScreen.type === "sunny-bakery-checkout") {
+      drawSunnyBakeryDemoScreen(ctx, W, H, S, font, ag.demoScreen);
+      return;
+    }
 
     ctx.fillStyle = "#f7f8fb";
     ctx.fillRect(0, 0, W, H);
@@ -2794,6 +2881,8 @@
 
     if (transport) {
       transport.send(Object.assign({ t: "meta", ua: navigator.userAgent }, metaForAgent()));
+      var demoScreen = demoScreenForAgent();
+      if (demoScreen) transport.send({ t: "demo-screen", screen: demoScreen });
       transport.send({
         t: "session",
         sessionId: session.id,
@@ -2853,6 +2942,16 @@
       theme: CFG.color,
       demo: CFG.demo
     };
+  }
+
+  function demoScreenForAgent() {
+    if (!CFG.demo || typeof window.__supportLayerDemoScreen !== "function") return null;
+    try {
+      return window.__supportLayerDemoScreen();
+    } catch (e) {
+      log("demo screen model failed:", e && e.message);
+      return null;
+    }
   }
 
   function sendToAgent(obj) {
@@ -2951,6 +3050,12 @@
         if (msg.data) {
           ag.snapshot = msg.data;
           renderAgentInfo();
+        }
+        break;
+      case "demo-screen":
+        if (msg.screen) {
+          ag.demoScreen = msg.screen;
+          renderSimulatedFeedIfNeeded();
         }
         break;
       case "chat":
@@ -3477,7 +3582,11 @@
     renderAgentBadge();
     renderStageEmpty();
     renderUnread();
-    if (ui.chatCard) ui.chatCard.hidden = true;
+    if (ui.chatCard) {
+      ui.chatCard.hidden = false;
+      ui.chatBtn.classList.add("sl-armed");
+      ui.chatBtn.setAttribute("aria-expanded", "true");
+    }
     if (ui.infoCard) ui.infoCard.hidden = true;
     // Keep listening so the customer can rejoin after a reload.
     if (CFG.demo) transport = LoopbackTransport();

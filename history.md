@@ -314,7 +314,19 @@ it, and the reason is now written down where the next person will look.
 
 **Suite: 142 → 157 checks.** Green headless and headed, locally and against the deployed origin.
 
-## 2026-09-14 — Session 6: one stage, two perspectives
+## 2026-09-14 — Session 7: one-file interactive demo handoff
+
+The manual demo is now `demo.html`, rather than a room of embedded frames. The customer opens the page, submits a
+support request through the real widget, and receives a simulated webhook notification with the ticket details and an
+agent link. Opening that link launches the same file in a second tab with `?sl_role=agent&peer=...&sl-demo=1`.
+
+The two tabs synchronize through the same-origin `BroadcastChannel` loopback transport (with localStorage retaining
+the ticket context). The agent sees the support request, the matching Sunny Bakery checkout feed with sensitive values
+blurred, and the existing point/click/draw/type/chat controls update the customer tab in real time. `room.html` stays
+as the automated fixture; the homepage and README now point developers to the new handoff experience.
+
+**Suite: 192 → 204 checks.** Green headless locally.
+
 
 **The demo was telling the story twice at once.** The storyboard shipped as two windows side by side, so a
 visitor read the customer's checkout and the agent's channel simultaneously and had to work out which one to

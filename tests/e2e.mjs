@@ -326,6 +326,23 @@ async function main() {
       if (n === 5) {
         check("step 5 keeps the agent's view and opens the session", s.side === "agent" && s.session && s.sessionSpot && !s.notice, JSON.stringify(s));
         check("the agent's window is the customer's own URL in the agent role", /sl_role=agent/.test(s.url) && /agent role/.test(s.tag), `${s.url} / ${s.tag}`);
+        const capture = await home.evaluate(() => {
+          const customer = document.querySelector(".view-customer .mock-app");
+          const agent = document.querySelector(".session-screen .mock-app");
+          const values = (root) => Array.from(root.querySelectorAll(".mock-line, .mock-sensitive"), (node) => node.textContent.replace(/\\s+/g, " ").trim());
+          return {
+            customerValues: values(customer),
+            agentValues: values(agent),
+            agentHasReplacementSkeleton: !!document.querySelector(".session-screen .skel"),
+            customerWidth: Math.round(customer.getBoundingClientRect().width),
+            agentWidth: Math.round(agent.getBoundingClientRect().width),
+            agentSensitiveFilters: Array.from(agent.querySelectorAll(".js-sensitive"), (node) => getComputedStyle(node).filter),
+          };
+        });
+        check("the agent feed uses the same checkout data as the customer", JSON.stringify(capture.customerValues) === JSON.stringify(capture.agentValues), JSON.stringify(capture));
+        check("the agent feed has no replacement skeleton content", !capture.agentHasReplacementSkeleton, JSON.stringify(capture));
+        check("the agent feed keeps the customer's page scale", capture.agentWidth === capture.customerWidth, JSON.stringify(capture));
+        check("sensitive values are blurred in the agent feed", capture.agentSensitiveFilters.every((filter) => filter !== "none"), JSON.stringify(capture));
       }
       if (n === 6) {
         check("step 6 cuts back to the customer to show the help landing", s.side === "customer" && s.ring && s.incoming && s.chat, JSON.stringify(s));
@@ -429,6 +446,7 @@ async function main() {
         hasStage: !!stage,
         tools,
         hasChat: !!root.querySelector(".sl-card"),
+        chatOpen: !!root.querySelector(".sl-card:not(.sl-info-card)") && !root.querySelector(".sl-card:not(.sl-info-card)").hidden,
         fabHidden: !root.querySelector(".sl-fab"),
         emptyShown: !root.querySelector(".sl-stage-empty").hidden,
         dockBottom: rect ? Math.round(window.innerHeight - rect.bottom) : null,
@@ -440,6 +458,7 @@ async function main() {
     check("the dock is a floating bar pinned to the bottom", agentShell.dockFloats === "absolute" && agentShell.dockBottom < 40, JSON.stringify(agentShell));
     check("the agent never sees the customer request button", agentShell.fabHidden);
     check("the agent waits with an explicit empty state", agentShell.emptyShown);
+    check("communication is open by default", agentShell.chatOpen);
 
     /* ---------- open the widget ---------- */
     group("request flow");
@@ -728,17 +747,13 @@ async function main() {
       const badge = root.querySelector(".sl-unread");
       return { hidden: badge.hidden, text: badge.textContent };
     });
-    check("a closed chat window raises an unread count", unreadBadge.text === "1" || unreadBadge.text === "2", JSON.stringify(unreadBadge));
-    await clickIn(page, agentFrame, '.sl-dock-btn[data-act="chat"]', { frameSelector: "#agent-frame" });
-    const chatOpened = await waitFor(() =>
-      agentFrame.evaluate(() => {
-        const root = document.querySelector("#supportlayer-root").shadowRoot;
-        const card = root.querySelector(".sl-card:not(.sl-info-card)");
-        return !card.hidden && root.querySelector(".sl-unread").hidden;
-      })
-    );
-    check("opening the chat clears the badge", chatOpened);
-    await clickIn(page, agentFrame, '.sl-card:not(.sl-info-card) .sl-x');
+    check("an open chat window stays available for incoming messages", unreadBadge.hidden && agentFrame.url().includes("sl_role=agent"), JSON.stringify(unreadBadge));
+    const chatOpened = await agentFrame.evaluate(() => {
+      const root = document.querySelector("#supportlayer-root").shadowRoot;
+      const card = root.querySelector(".sl-card:not(.sl-info-card)");
+      return !!card && !card.hidden;
+    });
+    check("communication remains open after messages arrive", chatOpened);
 
     /* ---------- coordinate round trip ---------- */
     group("agent control · coordinates");
@@ -1091,6 +1106,63 @@ async function main() {
     check("with no customer it waits, and never shows the request button", standaloneShell.waiting && standaloneShell.noFab, JSON.stringify(standaloneShell));
     if (HEADED) await standalone.screenshot({ path: path.join(SHOT_DIR, "agent-headed.png") });
     await standalone.close();
+
+    /* ============================= interactive single-file demo =============================
+     * `demo.html` is the handoff experience a developer can open directly: the customer submits
+     * a real widget request, the simulated webhook becomes a support notification, and opening its
+     * link loads the same document in the agent role in a second tab. */
+    group("interactive demo handoff");
+    const demoCustomer = await browser.newPage();
+    const demoAgent = await browser.newPage();
+    watch(demoCustomer, "demo-customer");
+    watch(demoAgent, "demo-agent");
+    await demoCustomer.goto(`${BASE}/demo.html`, { waitUntil: "domcontentloaded" });
+    const demoBooted = await waitFor(() => demoCustomer.evaluate(() => !!window.SupportLayer && window.SupportLayer.role === "user"));
+    check("demo.html boots as the customer experience", demoBooted);
+    check("demo page has one customer document and no embedded room", await demoCustomer.evaluate(() => document.querySelectorAll("iframe").length === 0));
+    await demoCustomer.evaluate(() => window.SupportLayer.reset());
+    await clickSelector(demoCustomer, "#help");
+    await waitFor(() => demoCustomer.evaluate(() => document.querySelector("#supportlayer-root").shadowRoot.querySelector(".sl-panel.sl-open")));
+    const demoForm = await demoCustomer.evaluate(() => {
+      const root = document.querySelector("#supportlayer-root").shadowRoot;
+      return { name: !!root.querySelector("#sl-field-name"), issue: !!root.querySelector("#sl-field-issue"), severity: !!root.querySelector("#sl-field-severity") };
+    });
+    check("demo request form exposes ticket fields", demoForm.name && demoForm.issue && demoForm.severity, JSON.stringify(demoForm));
+    await clickIn(demoCustomer, demoCustomer, "#sl-field-name");
+    await demoCustomer.keyboard.type("Demo Developer");
+    await clickIn(demoCustomer, demoCustomer, "#sl-field-issue");
+    await demoCustomer.keyboard.type("The checkout button keeps timing out.");
+    await clickIn(demoCustomer, demoCustomer, "#sl-field-severity");
+    await demoCustomer.keyboard.type("Blocking my checkout");
+    await clickIn(demoCustomer, demoCustomer, "button[type=submit]");
+    const notification = await waitFor(() => demoCustomer.evaluate(() => {
+      const toast = document.querySelector("#ticket-toast");
+      return toast && toast.classList.contains("show") && !!document.querySelector("#open-agent");
+    }), { timeout: 10000 });
+    check("the simulated webhook becomes a support notification", notification);
+    const ticket = await demoCustomer.evaluate(() => JSON.parse(localStorage.getItem("supportlayer_demo_ticket") || "null"));
+    check("notification stores a customer ticket and agent URL", !!ticket && ticket.name === "Demo Developer" && /demo\.html\?/.test(ticket.url || ""), JSON.stringify(ticket));
+    check("agent URL uses the same demo document and agent role", /sl_role=agent/.test(ticket?.url || "") && /sl-demo=1/.test(ticket?.url || ""), ticket?.url || "");
+    await demoAgent.goto(ticket.url, { waitUntil: "domcontentloaded" });
+    const agentBooted = await waitFor(() => demoAgent.evaluate(() => !!window.SupportLayer && window.SupportLayer.role === "agent"));
+    check("opening the handoff URL boots the agent role", agentBooted);
+    const agentSurface = await demoAgent.evaluate(() => {
+      const root = document.querySelector("#supportlayer-root").shadowRoot;
+      const chat = root.querySelector(".sl-card:not(.sl-info-card)");
+      return { hiddenCustomerShell: document.getElementById("customer-shell").hidden, chatOpen: !!chat && !chat.hidden, hasContextCard: !!document.querySelector(".agent-ticket") };
+    });
+    check("agent tab shows only communication and tools", agentSurface.hiddenCustomerShell && agentSurface.chatOpen && !agentSurface.hasContextCard, JSON.stringify(agentSurface));
+    const demoConnected = await waitFor(() => demoAgent.evaluate(() => window.SupportLayer.agent && window.SupportLayer.agent.state().connected), { timeout: 12000 });
+    check("agent tab connects to the customer over the demo transport", demoConnected);
+    const demoCustomerConnected = await waitFor(() => demoCustomer.evaluate(() => window.SupportLayer.getState() === "CONNECTED"), { timeout: 8000 });
+    check("customer status stays synchronized with the agent connection", demoCustomerConnected);
+    const agentFeed = await demoAgent.evaluate(() => window.SupportLayer.agent.state().feed);
+    check("agent tab displays the simulated customer screen", agentFeed);
+    await demoAgent.evaluate(() => window.SupportLayer.agent.chat("I can see the checkout timeout. I’m pointing at the payment area now."));
+    const customerChat = await waitFor(() => demoCustomer.evaluate(() => window.SupportLayer.getChat().some((message) => message.text.includes("payment area"))));
+    check("agent chat arrives in the customer tab in realtime", customerChat);
+    await demoCustomer.close();
+    await demoAgent.close();
 
     /* ============================= CDN delivery =============================
      * The quick-start snippet loads the widget from jsDelivr, which serves `.html` as

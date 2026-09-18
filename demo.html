@@ -1,0 +1,182 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>SupportLayer Demo — Sunny Bakery</title>
+<link rel="icon" type="image/svg+xml" href="favicon.svg">
+<style>
+  :root { --ink:#12151c; --muted:#6b7385; --line:#e6e8ee; --brand:#f4a52a; --teal:#14b8a6; --bg:#f7f8fb; --dark:#10131a; }
+  * { box-sizing:border-box; }
+  body { margin:0; background:var(--bg); color:var(--ink); font:14px/1.5 -apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif; }
+  body.agent-mode { background:#05070b; }
+  button { font:inherit; cursor:pointer; }
+  .nav { display:flex; align-items:center; gap:16px; padding:14px 22px; background:#fff; border-bottom:1px solid var(--line); position:sticky; top:0; z-index:5; }
+  .brand { display:flex; align-items:center; gap:9px; font-weight:800; font-size:15px; }
+  .brand i { width:22px; height:22px; border-radius:7px; background:var(--brand); }
+  .nav-links { display:flex; gap:16px; margin-left:auto; color:var(--muted); font-weight:600; }
+  .cart { background:var(--ink); color:#fff; padding:5px 11px; border-radius:999px; font-size:12px; }
+  main { max-width:1060px; margin:0 auto; padding:24px; display:grid; grid-template-columns:minmax(0,1fr) 320px; gap:22px; }
+  @media (max-width:860px) { main { grid-template-columns:1fr; } }
+  h1 { margin:0 0 4px; font-size:22px; }
+  h2 { margin:0 0 11px; font-size:15px; }
+  .sub { color:var(--muted); margin:0 0 18px; font-size:13px; }
+  .tag { display:inline-block; margin-bottom:13px; padding:4px 10px; border-radius:999px; background:#ecfeff; border:1px solid #a5f3fc; color:#0e7490; font-size:10px; font-weight:800; letter-spacing:.07em; text-transform:uppercase; }
+  .card { background:#fff; border:1px solid var(--line); border-radius:14px; padding:16px; }
+  .card + .card { margin-top:14px; }
+  .item { display:flex; align-items:center; gap:12px; padding:11px 0; border-bottom:1px dashed var(--line); }
+  .item:last-child { border-bottom:0; }
+  .thumb { width:46px; height:46px; flex:none; border-radius:10px; background:linear-gradient(135deg,#ffe1a8,var(--brand)); }
+  .name { font-weight:700; }
+  .meta { color:var(--muted); font-size:12px; }
+  .price { margin-left:auto; font-weight:700; }
+  .row { display:flex; justify-content:space-between; gap:12px; padding:7px 0; font-size:13px; }
+  .total { border-top:1px solid var(--line); margin-top:8px; padding-top:11px; font-size:15px; font-weight:800; }
+  .sensitive-data { font-family:ui-monospace,SFMono-Regular,Menlo,monospace; font-size:12px; }
+  .error { display:none; margin-top:12px; padding:11px 12px; border-radius:10px; background:#fef2f2; border:1px solid #fecaca; color:#b91c1c; font-size:12.5px; }
+  .error.show { display:block; }
+  .pay { width:100%; border:0; border-radius:11px; padding:12px; background:var(--teal); color:#05100e; font-weight:800; }
+  .pay.busy { background:#cbd5e1; color:#475569; }
+  .help-note { margin:12px 0 0; color:var(--muted); font-size:12px; }
+  .help-note button, .link-button { border:0; padding:0; color:#0f766e; background:none; font-weight:800; text-decoration:underline; }
+  footer { max-width:1060px; margin:auto; padding:12px 24px 28px; color:var(--muted); font-size:12px; }
+
+  /* The simulated webhook/chat notification that gives the developer the handoff. */
+  .ticket-toast { position:fixed; right:22px; top:72px; z-index:100; width:min(390px,calc(100vw - 32px)); padding:15px; border:1px solid rgba(20,184,166,.38); border-radius:15px; background:#101820; color:#eef1f6; box-shadow:0 22px 60px rgba(0,0,0,.35); transform:translateY(-12px); opacity:0; pointer-events:none; transition:opacity .2s,transform .2s; }
+  .ticket-toast.show { transform:none; opacity:1; pointer-events:auto; }
+  .ticket-toast-head { display:flex; align-items:center; gap:9px; margin-bottom:10px; font-weight:800; }
+  .ticket-dot { width:9px; height:9px; border-radius:50%; background:var(--teal); box-shadow:0 0 0 4px rgba(20,184,166,.16); }
+  .ticket-toast small { color:#8c96a8; font-weight:600; }
+  .ticket-details { display:grid; gap:7px; margin:10px 0 13px; color:#cfd6e2; font-size:12.5px; }
+  .ticket-details b { color:#fff; }
+  .ticket-actions { display:flex; gap:8px; align-items:center; }
+  .ticket-actions button { flex:1; border:0; border-radius:9px; padding:9px 11px; background:var(--teal); color:#05100e; font-weight:800; }
+  .ticket-actions .dismiss { flex:0 0 auto; background:rgba(255,255,255,.08); color:#cfd6e2; }
+  .demo-status { display:flex; align-items:center; gap:8px; margin-top:13px; padding:9px 11px; border-radius:10px; background:#f0fdfa; border:1px solid #99f6e4; color:#0f766e; font-size:12px; font-weight:700; }
+  .status-dot { width:8px; height:8px; border-radius:50%; background:#94a3b8; }
+  .demo-status.live .status-dot { background:#14b8a6; box-shadow:0 0 0 4px rgba(20,184,166,.14); }
+</style>
+</head>
+<body>
+<div id="customer-shell">
+  <header class="nav">
+    <span class="brand"><i></i> Sunny Bakery</span>
+    <nav class="nav-links"><span>Shop</span><span>Subscriptions</span><span>Help</span><span class="cart">Cart · 3</span></nav>
+  </header>
+
+  <main>
+    <section>
+      <span class="tag">Interactive SupportLayer demo · customer view</span>
+      <h1>Checkout</h1>
+      <p class="sub">This is the customer’s real page. Trigger support, then open the agent link in a second tab and use the floating tools against this page.</p>
+      <div class="card">
+        <div class="item"><span class="thumb"></span><span><span class="name">Sourdough starter kit</span><div class="meta">Ships Tuesday · qty 1</div></span><span class="price">$32.00</span></div>
+        <div class="item"><span class="thumb"></span><span><span class="name">Rye flour, stone ground</span><div class="meta">2 kg · qty 2</div></span><span class="price">$9.60</span></div>
+        <div class="item"><span class="thumb"></span><span><span class="name">Bench scraper</span><div class="meta">Stainless · qty 1</div></span><span class="price">$6.60</span></div>
+      </div>
+      <div class="card">
+        <h2>Payment</h2>
+        <p class="sub">The failure below is intentional. The sensitive values are blurred before the support session is shared.</p>
+        <div class="row"><span>Card on file</span><span class="sensitive-data">4242 4242 4242 4242</span></div>
+        <div class="row"><span>Receipt email</span><span class="sensitive-data">jane.doe@example.com</span></div>
+        <div class="row"><span>Tax ID on file</span><span class="sensitive-data">123-45-6789</span></div>
+        <button class="pay" id="pay" type="button">Complete purchase</button>
+        <div class="error" id="error"><strong>Payment gateway timeout (504).</strong> Your card was not charged. Nothing you did was wrong.</div>
+        <p class="help-note">Card charged twice? Use <button id="help" type="button">Get support</button> and we’ll look at it with you live.</p>
+        <div class="demo-status" id="customer-status"><span class="status-dot"></span><span>Support is ready when you are.</span></div>
+      </div>
+    </section>
+    <aside>
+      <div class="card"><h2>Order summary</h2><div class="row"><span>Subtotal</span><span>$48.20</span></div><div class="row"><span>Shipping</span><span>Free</span></div><div class="row"><span>Tax</span><span>$3.86</span></div><div class="row total"><span class="amount-due">Total due</span><span class="order-total">$52.06</span></div></div>
+      <div class="card"><h2>Account</h2><div class="row"><span>Signed in as</span><span class="sensitive-data">jane.doe@example.com</span></div><div class="row"><span>Plan</span><span>Weekly subscription</span></div><div class="row"><span>Reputation</span><span>Trusted customer</span></div></div>
+    </aside>
+  </main>
+  <footer>Interactive demo page · the simulated support webhook and transport stay in this browser.</footer>
+</div>
+
+<div class="ticket-toast" id="ticket-toast" aria-live="polite">
+  <div class="ticket-toast-head"><span class="ticket-dot"></span><span>New support request</span><small>simulated webhook</small></div>
+  <div class="ticket-details"><div><b id="ticket-name">Customer</b> needs help with checkout</div><div>“<span id="ticket-issue">The payment is failing.</span>”</div><div>Severity: <b id="ticket-severity">Blocking my checkout</b></div></div>
+  <div class="ticket-actions"><button id="open-agent" type="button">Open support portal ↗</button><button class="dismiss" id="dismiss-ticket" type="button">Later</button></div>
+</div>
+
+<script src="supportlayer.js" data-demo="true" data-mode="video" data-theme="#14b8a6" data-webhook="https://hooks.example.com/supportlayer/demo" data-blur-selectors=".sensitive-data, .amount-due, .order-total" data-blur-regex="\d{3}-\d{2}-\d{4}|[\w.+-]+@[\w-]+\.[a-z]{2,}" data-fields='[{"name":"name","type":"text","label":"Your name","required":true,"placeholder":"Jane Doe"},{"name":"issue","type":"textarea","label":"What went wrong?","required":true,"placeholder":"The Complete purchase button spins forever on checkout."},{"name":"severity","type":"select","label":"How urgent is this?","options":["Blocking my checkout","Annoying but workable","Just a question"]}]'></script>
+<script>
+(function () {
+  "use strict";
+  var params = new URLSearchParams(location.search);
+  var isAgent = params.get("sl_role") === "agent";
+  var ticketKey = "supportlayer_demo_ticket";
+  var bus;
+  try { bus = new BroadcastChannel("supportlayer-demo-experience"); } catch (e) { bus = null; }
+
+  document.body.classList.toggle("agent-mode", isAgent);
+  document.getElementById("customer-shell").hidden = isAgent;
+
+  function readTicket() { try { return JSON.parse(localStorage.getItem(ticketKey) || "null"); } catch (e) { return null; } }
+  function saveTicket(ticket) { try { localStorage.setItem(ticketKey, JSON.stringify(ticket)); } catch (e) {} }
+  function send(message) { if (bus) bus.postMessage(message); }
+  function text(id, value) { var el = document.getElementById(id); if (el) el.textContent = value == null ? "" : String(value); }
+
+  window.__supportLayerDemoScreen = function () {
+    return { type: "sunny-bakery-checkout", customer: "Demo Developer", issue: "The checkout button keeps timing out.", sensitive: true };
+  };
+
+  function renderCustomerTicket(ticket) {
+    if (isAgent || !ticket) return;
+    text("ticket-name", ticket.name || "Customer");
+    text("ticket-issue", ticket.issue || "The payment is failing.");
+    text("ticket-severity", ticket.severity || "Blocking my checkout");
+    document.getElementById("ticket-toast").classList.add("show");
+  }
+
+  window.addEventListener("storage", function (event) {
+    if (event.key === ticketKey && event.newValue) {
+      var ticket = readTicket();
+      renderCustomerTicket(ticket);
+    }
+  });
+  if (bus) bus.onmessage = function (event) {
+    var message = event.data || {};
+    if (message.type === "ticket") { saveTicket(message.ticket); renderCustomerTicket(message.ticket); }
+  };
+
+  if (isAgent) {
+    // The ticket payload is delivered with the handoff URL; the agent view stays focused on communication and tools.
+  } else {
+    document.getElementById("help").addEventListener("click", function () {
+      if (window.SupportLayer) window.SupportLayer.requestHelp();
+    });
+    var pay = document.getElementById("pay");
+    var error = document.getElementById("error");
+    pay.addEventListener("click", function () {
+      pay.classList.add("busy"); pay.textContent = "Contacting gateway…";
+      setTimeout(function () { pay.classList.remove("busy"); pay.textContent = "Complete purchase"; error.classList.add("show"); }, 700);
+    });
+    document.getElementById("dismiss-ticket").addEventListener("click", function () { document.getElementById("ticket-toast").classList.remove("show"); });
+    document.getElementById("open-agent").addEventListener("click", function () {
+      var ticket = readTicket();
+      if (!ticket || !ticket.url) return;
+      var win = window.open(ticket.url, "supportlayer-agent", "popup,width=1100,height=800");
+      if (win) win.focus();
+    });
+
+    window.addEventListener("supportlayer:webhook", function (event) {
+      var payload = event.detail || {};
+      if (payload.event_type !== "support_request") return;
+      var answers = payload.user_data || {};
+      var ticket = { name: answers.name || "Customer", issue: answers.issue || "Checkout problem", severity: answers.severity || "Blocking my checkout", url: payload.live_session_url, sessionId: payload.session_id, at: Date.now() };
+      saveTicket(ticket); send({ type: "ticket", ticket: ticket }); renderCustomerTicket(ticket);
+    });
+    window.addEventListener("supportlayer:state", function (event) {
+      var state = event.detail && event.detail.state;
+      var label = state === "CONNECTED" ? "Agent is connected — use the agent tab to point, draw, type, or chat." : state === "WAITING" ? "Request sent — open the support portal from the notification." : "Support is ready when you are.";
+      var status = document.getElementById("customer-status");
+      status.classList.toggle("live", state === "CONNECTED");
+      status.querySelector("span:last-child").textContent = label;
+    });
+  }
+})();
+</script>
+</body>
+</html>
