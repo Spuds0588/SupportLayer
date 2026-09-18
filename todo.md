@@ -252,8 +252,8 @@ v2 collapsed the two-page design into one: the agent no longer has a page of the
 - [x] Added `demo.html` as the recommended manual experience: one customer document with `?sl_role=agent` switching it into the agent view.
 - [x] Customer support submission now becomes a simulated webhook notification with ticket details and an **Open support portal** action.
 - [x] The handoff opens the same demo URL in a second tab with `peer` and `sl-demo=1`; both tabs stay synchronized over the same-origin loopback bus.
-- [x] The agent tab displays ticket context, connects to the room, shows the matching blurred Sunny Bakery checkout feed, and can chat/use the existing realtime tools.
-- [x] Added 12 end-to-end checks for the notification, handoff URL, agent context, connection, feed, and realtime chat.
+- [x] The agent tab connects to the room, shows the matching blurred Sunny Bakery checkout feed, keeps communication open, and can use the existing realtime tools.
+- [x] Added end-to-end checks for the notification, handoff URL, connection, feed, always-open communication, and realtime chat.
 - [x] Updated the homepage and README links so `demo.html` is the recommended interactive demo; `room.html` remains the automated fixture.
 
 ## Backlog (explicitly not in v2)

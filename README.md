@@ -6,7 +6,7 @@ redacted, one-frame snapshot — straight to the webhook you already have (Slack
 When a report isn't enough, the agent joins the *same page* over a live peer-to-peer session and can point at
 things, draw on the user's screen, and hand text over for review.
 
-`demo.html` is the interactive development experience: it is one page with two URL-param roles. In the customer role, submit a request and the simulated webhook produces an in-page support notification with the ticket details and an **Open support portal** action. That action opens the same `demo.html` in a second tab with `?sl_role=agent&peer=...&sl-demo=1`; the agent connects over the same-origin `BroadcastChannel` transport, displays the ticket context and customer feed, and can chat, point, click, draw, or type while the customer tab updates in real time.
+`demo.html` is the interactive development experience: it is one page with two URL-param roles. In the customer role, submit a request and the simulated webhook produces an in-page support notification with the ticket details and an **Open support portal** action. That action opens the same `demo.html` in a second tab with `?sl_role=agent&peer=...&sl-demo=1`; the agent connects over the same-origin `BroadcastChannel` transport, shows the customer feed with communication open, and can point, click, draw, or type while the customer tab updates in real time.
 
 The legacy `room.html` fixture remains for the automated widget test harness; it is not the recommended manual demo.
 
@@ -154,7 +154,7 @@ The dock is the whole interface, and it stays out of the way until used:
 | **Click** | Visual ripple at the point, then a real `focus()` + `click()` on the element under it. |
 | **Draw** | Interaction-blocking canvas strokes in the agent's swatch colour that fade a few seconds after the strokes stop. |
 | **Type** | The field is outlined, the text is handed over in a copy/paste tooltip, and (when the field is a plain input) inserted through the native value setter so React/Vue actually register it. |
-| **Chat / Report / End** | Toggle the transcript, re-read the diagnostics the customer submitted, or close the session for them. |
+| **Chat / End** | Keep the always-open transcript in contact with the customer, or close the session for them. |
 
 A coach line listing the shortcuts appears on connect and then fades; hovering the dock brings it back.
 
