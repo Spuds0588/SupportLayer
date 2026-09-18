@@ -768,9 +768,26 @@ async function main() {
     check("target coordinate is inside the viewport", target.x > 0 && target.x < 1 && target.y > 0 && target.y < 1, JSON.stringify(target));
 
     // Normalization math must reproduce the coordinates the customer just reported.
+    const viewportGeometry = await agentFrame.evaluate(() => {
+      const root = document.querySelector("#supportlayer-root").shadowRoot;
+      const stage = root.querySelector(".sl-stage").getBoundingClientRect();
+      const surface = root.querySelector(".sl-sim.sl-on, .sl-feed.sl-on, .sl-ink").getBoundingClientRect();
+      const client = window.SupportLayer.agent.state().client;
+      return {
+        clientViewport: client && client.viewport,
+        stage: { width: stage.width, height: stage.height },
+        surface: { width: surface.width, height: surface.height },
+      };
+    });
+    const expectedAspect = viewportGeometry.clientViewport.w / viewportGeometry.clientViewport.h;
+    const actualAspect = viewportGeometry.surface.width / viewportGeometry.surface.height;
+    check("agent surface uses the customer's viewport ratio", Math.abs(actualAspect - expectedAspect) < 0.01, JSON.stringify(viewportGeometry));
+    check("agent surface is scaled inside the available stage", viewportGeometry.surface.width <= viewportGeometry.stage.width + 1 && viewportGeometry.surface.height <= viewportGeometry.stage.height + 1, JSON.stringify(viewportGeometry));
+
     const normalized = await agentFrame.evaluate((x, y) => {
-      const stage = document.querySelector("#supportlayer-root").shadowRoot.querySelector(".sl-stage");
-      const rect = stage.getBoundingClientRect();
+      const root = document.querySelector("#supportlayer-root").shadowRoot;
+      const surface = root.querySelector(".sl-sim.sl-on, .sl-feed.sl-on, .sl-ink");
+      const rect = surface.getBoundingClientRect();
       return window.SupportLayer.agent.normalize(rect.left + rect.width * x, rect.top + rect.height * y);
     }, target.x, target.y);
     check("agent normalization round-trips within 1%", Math.abs(normalized.x - target.x) < 0.01 && Math.abs(normalized.y - target.y) < 0.01,

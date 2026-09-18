@@ -1021,11 +1021,11 @@
     ".sl-stage[data-tool='click'] { cursor: pointer; }",
     ".sl-stage[data-tool='draw'] { cursor: crosshair; }",
     ".sl-stage[data-tool='type'] { cursor: text; }",
-    ".sl-feed { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: contain; background: #000; display: none; }",
+    ".sl-feed { position: absolute; left: 50%; top: 50%; width: 0; height: 0; transform: translate(-50%, -50%); object-fit: contain; background: #000; display: none; }",
     ".sl-feed.sl-on { display: block; }",
-    "canvas.sl-sim { position: absolute; inset: 0; width: 100%; height: 100%; display: none; }",
+    "canvas.sl-sim { position: absolute; left: 50%; top: 50%; width: 0; height: 0; transform: translate(-50%, -50%); display: none; }",
     "canvas.sl-sim.sl-on { display: block; }",
-    "canvas.sl-ink { position: absolute; inset: 0; width: 100%; height: 100%; z-index: 3; touch-action: none; }",
+    "canvas.sl-ink { position: absolute; left: 50%; top: 50%; width: 0; height: 0; transform: translate(-50%, -50%); z-index: 3; touch-action: none; }",
     "video.sl-pip, video.sl-selfcam { position: absolute; right: 16px; width: 22%; max-width: 260px; aspect-ratio: 4 / 3; object-fit: cover; border-radius: 12px; border: 1px solid rgba(255,255,255,.16); background: #05070b; box-shadow: 0 14px 34px rgba(0,0,0,.5); display: none; z-index: 4; }",
     "video.sl-pip.sl-on, video.sl-selfcam.sl-on { display: block; }",
     "video.sl-pip { top: 16px; }",
@@ -2043,7 +2043,16 @@
 
   function sizeAgentStage() {
     if (!ui.ink || !ui.stage) return;
-    var rect = ui.stage.getBoundingClientRect();
+    var stage = ui.stage.getBoundingClientRect();
+    var aspect = clientAspect();
+    var width = Math.min(stage.width, stage.height * aspect);
+    var height = width / aspect;
+    [ui.feed, ui.sim, ui.ink].forEach(function (surface) {
+      if (!surface) return;
+      surface.style.width = Math.max(1, Math.round(width)) + "px";
+      surface.style.height = Math.max(1, Math.round(height)) + "px";
+    });
+    var rect = { width: width, height: height };
     measureDock();
     var dpr = Math.min(2, window.devicePixelRatio || 1);
     [ui.ink, ui.sim].forEach(function (c) {
@@ -2054,7 +2063,8 @@
   }
 
   function stageRect() {
-    return ui.stage.getBoundingClientRect();
+    var surface = ui.feed && ui.feed.classList.contains("sl-on") ? ui.feed : ui.sim && ui.sim.classList.contains("sl-on") ? ui.sim : ui.ink;
+    return (surface || ui.stage).getBoundingClientRect();
   }
 
   /**
@@ -3034,6 +3044,10 @@
         break;
       case "meta":
         ag.client = msg;
+        if (ui.stage && msg.viewport && msg.viewport.w && msg.viewport.h) {
+          ui.stage.style.setProperty("--sl-client-aspect", String(msg.viewport.w / msg.viewport.h));
+          sizeAgentStage();
+        }
         // The customer also reports its own peer id, which is useful when a support
         // agent reloads and has to dial back into the same session.
         if (msg.peerId && !ag.targetPeer) ag.targetPeer = msg.peerId;
