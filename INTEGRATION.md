@@ -406,8 +406,7 @@ and it does not need any route of its own.
   not shared yet" apart from "the feed is live and nothing is happening".
 - Requires `https://` for the agent's own camera/mic in `video` mode. `chat` needs no media
   permission on either side beyond the customer's screen share at request time.
-- Coordinates are **normalized `0.0`–`1.0`** of the customer's viewport. Pixels never cross the wire.
-  If you fork the agent view, keep that invariant and account for `object-fit: contain` letterboxing.
+- The agent first locks the visible shared surface to the customer's reported viewport aspect ratio and scales it to fit the agent window. Coordinates are **normalized `0.0`–`1.0`** within that surface; pixels never cross the wire. If you fork the agent view, preserve the customer-ratio surface and account for any remaining `object-fit: contain` letterboxing.
 
 Typical wiring: the webhook handler posts `live_session_url` into a Slack channel or a ticket
 comment, and an agent clicks it.
@@ -435,7 +434,7 @@ Do these in order; each one catches a distinct class of mistake.
 6. **Round trip** — open the payload's `live_session_url` in a second browser. It must load *your*
    page with the agent dock over it, not a SupportLayer page. In `chat` mode, move the agent's pointer
    and confirm the laser lands on the element you hovered; then confirm **Type** hands text to the
-   right field. Coordinate misalignment is the most common fork regression.
+   right field. The agent surface should match the customer's viewport ratio and scale inside the agent window; coordinate misalignment is the most common fork regression.
    - **Did the agent actually see something?** The badge must read `screen live` and the stage must
      show the customer's page, not an empty frame. If it says `no screen yet` while the customer's
      panel says the agent can see their screen, the media call never connected — check that nothing
@@ -487,7 +486,7 @@ and transport are simulated, so commands issued from it are genuine and land on 
 | `snapshot` is always `null` | Declined capture, unsupported browser, or insecure context | Serve over HTTPS or `localhost`. |
 | `live_session_url` points at a raw HTML page | Console hosted on a CDN | Let the default apply, or set `data-live-base` to a real HTML host. |
 | Live mode never connects | CSP blocks the PeerJS broker | Add `connect-src https://0.peerjs.com wss://0.peerjs.com`. |
-| Laser lands in the wrong place | Forked agent view not normalizing against the rendered video | Send normalized `0.0`–`1.0` only; account for letterboxing. |
+| Laser lands in the wrong place | Agent surface ratio differs from the customer viewport, or the fork normalizes against the stage | Lock the shared surface to the customer's viewport ratio, then normalize within that rendered surface and account for letterboxing. |
 | Blur is missing on a regex | Pattern got comma-split | Use a JSON array, or avoid commas outside `{}`/`()`/`[]`. |
 | Form shows one textarea | Invalid `data-fields` JSON | Look for the `data-fields` warning in the console. |
 | Second click does nothing | 60-second per-session rate limit | Expected. `SupportLayer.reset()` clears it for testing. |

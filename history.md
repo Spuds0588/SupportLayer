@@ -193,6 +193,7 @@ things the code actually reads (`data-color`, `data-label`, `data-title`, `data-
 `data-live-base`, `data-peer-cdn`, `?sl_mode=`, `?sl_color=`), so an integrator reading the docs
 could not discover them.
 
+
 **The rule the maintainer corrected is now enforced, not just documented.** The mode is the
 developer's decision via `data-mode`; there is no user-facing channel switcher. Nothing in the
 suite pinned that, so a `chat | audio | video` segment control could have been re-introduced and
@@ -476,3 +477,9 @@ before it counts. `agents.md` records both traps so the next UI test against a p
 them.
 
 **Suite 183 → 188 checks**, green headless and headed.
+
+## 2026-09-18 — Customer-ratio agent surface
+
+The agent view now locks its visible screen surface to the customer's reported viewport aspect ratio and scales it proportionally inside the agent window. The interaction canvas uses that same rendered surface, so Point, Click, Draw, and Type normalize against what the agent actually sees rather than the agent browser's full viewport. Added regression checks for aspect matching, containment, and coordinate round trips, then updated the public integration guidance and architecture notes.
+
+**Suite: 205 → 207 checks.** Green locally and against the deployed GitHub Pages origin.

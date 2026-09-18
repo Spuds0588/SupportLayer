@@ -256,6 +256,12 @@ v2 collapsed the two-page design into one: the agent no longer has a page of the
 - [x] Added end-to-end checks for the notification, handoff URL, connection, feed, always-open communication, and realtime chat.
 - [x] Updated the homepage and README links so `demo.html` is the recommended interactive demo; `room.html` remains the automated fixture.
 
+## Phase 16 — Customer-ratio agent surface ✅ done
+- [x] Agent feed and interaction canvas lock to the customer's reported viewport aspect ratio and scale proportionally inside the agent stage.
+- [x] Coordinate normalization now uses the rendered customer-ratio surface rather than the full agent viewport.
+- [x] Added regression checks for aspect matching, containment, and normalized coordinate round trips.
+- [x] Updated the integration guide, architecture rules, and public docs with the customer-ratio contract.
+
 ## Backlog (explicitly not in v2)
 - [ ] Multiparty sessions / multiple agents per session.
 - [ ] Optional `data-position` placement attribute for the FAB.

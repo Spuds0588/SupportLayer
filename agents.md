@@ -51,10 +51,12 @@ dependencies, no framework.
    `view-resume` UI. Never auto-reconnect without a user gesture — browsers block
    automated media capture.
 5. **Coordinate math.** Every coordinate on the wire is **normalized `0.0`–`1.0`**, never
-   pixels. The agent view must normalize against the *rendered video* geometry
-   (accounting for `object-fit: contain` letterboxing) and, when the shared surface is the
-   whole screen, offset by the client's reported window geometry. Getting this wrong
-   silently misaligns clicks — it is the #1 regression risk in this repo.
+   pixels. The agent view must first size its shared surface to the customer's reported
+   viewport aspect ratio, scale it proportionally inside the agent window, and normalize
+   against that rendered surface (including any remaining `object-fit: contain`
+   letterboxing). When the shared surface is the whole screen, offset by the client's
+   reported window geometry. Getting this wrong silently misaligns clicks — it is the #1
+   regression risk in this repo.
 6. **Shadow DOM isolation, host-document privacy.** Widget UI lives in a shadow root so
    host CSS cannot reach it. Privacy blur is the opposite: it is applied to the **host
    `document.body`** (injected `<style>` + `TreeWalker` text wrapping). `removePrivacyBlur()`
@@ -170,9 +172,10 @@ loopback bus.
 - The dock publishes its measured height as `--sl-dock-h`; the toast and the coach line sit above
   `calc(var(--sl-dock-h) + 12px)`. Both overlapped the dock once, so the layout test now asserts they
   clear it — keep that assertion if you touch either.
-- The mock feed in demo mode is drawn at the *client's* viewport aspect ratio so
-  normalized coordinates stay honest. It is labelled `SIMULATED FEED`; commands sent from
-  it are real and land on the real page.
+- The mock feed in demo mode is drawn at the *client's* viewport aspect ratio, and the
+  agent surface is scaled to that same ratio before interaction. Normalized coordinates
+  therefore stay honest. It is labelled `SIMULATED FEED`; commands sent from it are real
+  and land on the real page.
 
 ## The homepage demo is an animation, on purpose
 
@@ -204,7 +207,7 @@ splits the reader's attention and reads as a comparison chart rather than a stor
 - Overlay-only pieces (the report card, the session view, the pointer, the highlight) are absolutely
   positioned and may fade; the highlight and the pointer are anchored to the error banner itself so they land
   on the problem at any pane width.
-- It must not grow into an interactive demo again. The interactive one lives in `room.html`.
+- It must not grow into an interactive demo again. The interactive one lives in `demo.html`; `room.html` remains an automated fixture.
 
 ## The hero sells the outcome, and the background moves
 
@@ -215,16 +218,15 @@ Two parts of the landing page are easy to over-explain or over-build:
   the mechanism (one-frame snapshot, the blur pass, role parameters, transport) belongs in `INTEGRATION.md`, not
   in the headline. **Do not let the hero grow back into a description of how it works** — no attribute table, no
   step-by-step flow strip, no transport talk above the fold. There is no hero flow strip to reintroduce.
-- **The background is hands.** Support requests popping up and fading away: `wavingHands` spawns a hand at a
-  random spot on a timer, it rises, waves a beat for attention, then removes itself — spawned over time rather
-  than looping forever, so the rhythm never reads as a heartbeat. The hand is drawn from primitives (five `rect`s
-  plus one motion arc, stroked by the `.hand-slot svg path` rule) in SupportLayer's own teal; MailLayer is
+- **The background is hands.** Support requests are represented by a shuffled, spaced set of hands across the
+  viewport. They remain visible while each hand independently waves on a long, delayed cycle, so waving feels like
+  a surprise rather than a constant heartbeat. The hand is drawn from primitives (five `rect`s plus one motion arc,
+  stroked by the `.hand-slot svg path` rule) in SupportLayer's own teal; MailLayer is
   red-orange, PhoneLayer purple, ZipLayer pink, so teal stays this project's. Two properties it must keep:
   - **It respects `prefers-reduced-motion` twice over** — the CSS hides `.hand-slot` *and* the JS returns before
     spawning anything. The suite asserts both, headless, by emulating the media feature.
-  - **It takes no pointer events** (`#bg-canvas` is `pointer-events: none`) and **pauses in a hidden tab**
-    (`document.hidden`). Because it pauses when hidden, any test that samples the hand count must call
-    `bringToFront()` first — otherwise it reads a deliberately frozen background as an empty one.
+  - **It takes no pointer events** (`#bg-canvas` is `pointer-events: none`). Reduced-motion users still get no
+    animated hands; the test suite emulates both motion branches.
 
 ## Two roles, one document (`room.html`)
 

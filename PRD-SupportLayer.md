@@ -152,7 +152,7 @@ If `data-headless="true"`, the floating action button (FAB) is suppressed, and t
 - [x] Agent surface lives in `supportlayer.js` (nothing to scaffold; `agent.html` was deleted).
 - [x] URL parameter parsing to extract the target `peer` ID (`?sl_role=agent&peer=…`).
 - [x] PeerJS connection logic for data channels and answering media streams (both directions).
-- [x] Coordinate normalization: relative `x`/`y` percentages `(0-1)` of mouse events on the rendered video, accounting for `object-fit: contain` letterboxing.
+- [x] Coordinate normalization: the agent surface locks to the customer's reported viewport aspect ratio, scales to fit the agent stage, and sends relative `x`/`y` percentages `(0-1)` from that rendered surface while accounting for any `object-fit: contain` letterboxing.
 - [x] Map MouseDown/MouseMove events to the selected dock tool (Point, Click, Type, Draw).
 - [x] Draw coordinates batched and sent via DataChannel on mouse-move intervals.
 
@@ -181,7 +181,7 @@ When modifying the widget state:
 #### 4. Coordinate Math Considerations
 When modifying the agent view (the `AGENT` branch of `supportlayer.js`) or the drawing logic:
 *   All coordinates sent over the data channel **must** be normalized to percentages (`0.0` to `1.0`). Never send absolute pixel values. 
-*   The agent view must calculate coordinates based on the *rendered* video dimensions, not the DOM element dimensions. Calculate the aspect ratio offset (`object-fit: contain` letterboxing) before normalizing the coordinates, or clicks/drawings will misalign on the client's screen.
+*   The agent view must lock the shared surface to the customer's viewport aspect ratio, scale it proportionally inside the stage, and calculate coordinates from that *rendered* surface, not the full agent DOM. Calculate any aspect ratio offset (`object-fit: contain` letterboxing) before normalizing the coordinates, or clicks/drawings will misalign on the client's screen.
 
 #### 5. DOM Manipulation and Privacy
 *   The widget UI must remain inside the Shadow DOM to prevent host site CSS interference. 

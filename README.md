@@ -23,7 +23,7 @@ The homepage leads with the outcome — **one line of code and your app has supp
 | --- | --- |
 | 🏠 **Homepage + walkthrough** | **[spuds0588.github.io/SupportLayer](https://spuds0588.github.io/SupportLayer/)** |
 | 🎬 **Interactive demo** | [`demo.html`](demo.html) — submit a request, open the agent link in a second tab, and try the synced support tools |
-| 🧪 **Integration harness** | [spuds0588.github.io/SupportLayer/test.html](https://spuds0588.github.io/SupportLayer/test.html) |
+| 🧪 **Integration harness** | Available in the repository for development verification |
 | 🎧 **Agent experience** | The customer's own URL + `?sl_role=agent&peer=<id>` — same page, no second app |
 | 📘 **Integration guide** | [INTEGRATION.md](https://github.com/Spuds0588/SupportLayer/blob/main/INTEGRATION.md) — wiring it into your app, for humans and coding agents |
 
@@ -158,15 +158,13 @@ The dock is the whole interface, and it stays out of the way until used:
 
 A coach line listing the shortcuts appears on connect and then fades; hovering the dock brings it back.
 
-Coordinates are **always normalized `0.0 – 1.0`** of the customer's viewport. The agent view computes the
-`object-fit: contain` letterbox offset before normalizing, and offsets whole-screen captures by the customer's
-reported window geometry. Pixels never cross the wire.
+The agent stage first locks its shared surface to the customer's reported viewport aspect ratio, then scales that surface to fit the agent window. Coordinates are **always normalized `0.0 – 1.0`** within that visible customer surface; the agent view computes any remaining `object-fit: contain` letterbox offset and offsets whole-screen captures by the customer's reported window geometry. Pixels never cross the wire.
 
 ## Run it locally
 
 ```bash
 npm start            # zero-dependency static server on http://127.0.0.1:4174
-npm test             # headless Chromium end-to-end suite (188 checks)
+npm test             # headless Chromium end-to-end suite (207 checks)
 npm run test:headed  # same suite with a visible window (real rendering + input)
 npm run test:live    # the same checks against the deployed GitHub Pages site
 npm run live:check   # the REAL path: real capture + real PeerJS signalling between two peers
@@ -181,7 +179,7 @@ It also asserts layout invariants — the FAB inside the customer viewport, the 
 toast and coach line clearing the dock — so a CSS regression fails the build instead of surviving as a bad screenshot.
 
 `test:live` passes `--base <url>` (equivalently `SL_BASE`) so the identical suite runs against a deployed origin —
-the same 188 checks pass against `https://spuds0588.github.io/SupportLayer/`, which is how the published page is
+the same production suite passes against `https://spuds0588.github.io/SupportLayer/`, including the customer-ratio surface and coordinate checks, which is how the published page is
 verified rather than assumed.
 
 That suite runs everything over a same-origin `BroadcastChannel` bus with synthetic capture, which means it never
